@@ -6,6 +6,7 @@ import com.minenorth_shops.Network;
 import com.minenorth_shops.packet.AdminEditPacket;
 import com.minenorth_shops.packet.AdminEditPacket.Op;
 import com.minenorth_shops.packet.AdminSyncPacket;
+import com.minenorth_shops.PermisCompat.LicenceInfo;
 import com.minenorth_shops.shop.Shop;
 import com.minenorth_shops.shop.ShopEntry;
 import com.minenorth_shops.shop.ShopMode;
@@ -40,10 +41,12 @@ public class ShopAdminScreen extends Screen {
     // page liste
     private static final int L_Y = 64, L_ROWS = 7, L_ROW_H = 16;
     // page édition
-    private static final int E_Y = 82, E_ROWS = 5, E_ROW_H = 18;
+    private static final int E_Y = 100, E_ROWS = 4, E_ROW_H = 18;
     private static final int LIST_X = 16, LIST_W = 272;
 
     private List<Shop> shops;
+    private boolean permis;
+    private List<LicenceInfo> licences;
     private String message;
     private int selectedShop = -1;   // sélection sur la page liste
     private int editing = -1;        // boutique en cours d'édition (-1 = page liste)
@@ -63,6 +66,8 @@ public class ShopAdminScreen extends Screen {
     public ShopAdminScreen(AdminSyncPacket m) {
         super(Component.literal("Boutiques"));
         this.shops = m.shops;
+        this.permis = m.permis;
+        this.licences = m.licences;
         this.message = m.message;
         if (m.focus >= 0 && shop(m.focus) != null) startEdit(m.focus);
     }
@@ -75,6 +80,8 @@ public class ShopAdminScreen extends Screen {
                 : focused == priceBox ? "price" : focused == qtyBox ? "qty" : null;
         saveTexts();
         this.shops = m.shops;
+        this.permis = m.permis;
+        this.licences = m.licences;
         if (!m.message.isEmpty()) this.message = m.message;
         if (m.focus >= 0 && shop(m.focus) != null) {
             startEdit(m.focus);
@@ -100,6 +107,20 @@ public class ShopAdminScreen extends Screen {
         if (id < 0) return null;
         for (Shop s : shops) if (s.id == id) return s;
         return null;
+    }
+
+    /** Nom lisible d'une licence, ou son id si le serveur ne la connaît pas. */
+    private String licenceName(String id) {
+        for (LicenceInfo l : licences) if (l.id().equals(id)) return l.name();
+        return id;
+    }
+
+    /** Licence suivante dans la liste (aucune -> 1re -> 2e ... -> dernière -> aucune). */
+    private String nextLicence(String current) {
+        if (licences.isEmpty()) return "";
+        int i = -1;
+        for (int k = 0; k < licences.size(); k++) if (licences.get(k).id().equals(current)) i = k;
+        return i + 1 >= licences.size() ? "" : licences.get(i + 1).id();
     }
 
     private void startEdit(int id) {
@@ -244,6 +265,17 @@ public class ShopAdminScreen extends Screen {
                 () -> send(Op.TOGGLE_CASH, s.id));
         btn(219, 58, 85, 18, (s.mode == ShopMode.SELL ? "Carte : " : "Compte : ") + (s.allowCard ? "oui" : "non"),
                 s.allowCard ? ShopButton.PINK : ShopButton.DARK, () -> send(Op.TOGGLE_CARD, s.id));
+
+        // licence exigée (mod minenorth_permis) : clic = licence suivante, « Aucune » = retirer
+        String licLabel;
+        if (s.requiresLicence()) licLabel = "Licence requise : " + licenceName(s.licence);
+        else if (!permis) licLabel = "Licence : mod permis absent";
+        else licLabel = "Licence requise : aucune";
+        btn(16, 78, 210, 18, licLabel, s.requiresLicence() ? ShopButton.GREEN : ShopButton.DARK,
+                () -> send(Op.SET_LICENCE, s.id, 0, nextLicence(s.licence), 0, 0))
+                .enabled(permis && !licences.isEmpty());
+        btn(230, 78, 74, 18, "Aucune", ShopButton.GHOST, () -> send(Op.SET_LICENCE, s.id, 0, "", 0, 0))
+                .enabled(s.requiresLicence());
 
         int maxOffset = Math.max(0, s.entries.size() - E_ROWS);
         btn(LIST_X + LIST_W + 2, E_Y, 14, E_ROWS * E_ROW_H / 2 - 1, "^", ShopButton.DARK, () -> offset = Math.max(0, offset - 1))
@@ -468,7 +500,7 @@ public class ShopAdminScreen extends Screen {
             boolean sel = sh.id == selectedShop;
             if (sel) g.fill(x, y, x + LIST_W, y + L_ROW_H, CYAN);
             else if (mx >= x && mx < x + LIST_W && my >= y && my < y + L_ROW_H) g.fill(x, y, x + LIST_W, y + L_ROW_H, HOVER);
-            String right = sh.mode.label + " · " + sh.entries.size() + " art.";
+            String right = (sh.requiresLicence() ? "Licence · " : "") + sh.mode.label + " · " + sh.entries.size() + " art.";
             int rw = font.width(right);
             g.drawString(font, "#" + sh.id, x + 4, y + 4, sel ? 0xFFFFFFFF : DIM, false);
             g.drawString(font, font.plainSubstrByWidth(sh.name, LIST_W - rw - 40), x + 30, y + 4, 0xFFFFFFFF, false);

@@ -2,10 +2,12 @@ package com.minenorth_shops;
 
 import com.minenorth_eurobank.Money;
 import com.minenorth_shops.items.ShopLinkerItem;
+import com.minenorth_shops.packet.AdminEditPacket;
 import com.minenorth_shops.shop.Shop;
 import com.minenorth_shops.shop.ShopData;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -30,12 +32,20 @@ import java.util.Collection;
  * /shops info <entité>                 quelle boutique est liée à cette entité
  * /shops open <id> [joueurs]           ouvre la boutique pour des joueurs (blocs de commande, PNJ d'autres mods...)
  * /shops linker <id>                   donne l'outil de liaison
+ * /shops licence <id> <licence|aucune> licence (mod minenorth_permis) exigée pour commercer
  */
 public final class ShopCommands {
     private ShopCommands() {}
 
     private static final SuggestionProvider<CommandSourceStack> SHOP_IDS = (ctx, b) ->
             SharedSuggestionProvider.suggest(ShopData.get(ctx.getSource().getServer()).ids().stream().map(String::valueOf), b);
+
+    private static final SuggestionProvider<CommandSourceStack> LICENCES = (ctx, b) -> {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        ids.add("aucune");
+        for (PermisCompat.LicenceInfo l : PermisCompat.licences()) ids.add(l.id());
+        return SharedSuggestionProvider.suggest(ids, b);
+    };
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
         d.register(Commands.literal("shops").requires(s -> s.hasPermission(2))
@@ -59,7 +69,11 @@ public final class ShopCommands {
                                         .executes(c -> open(c, EntityArgument.getPlayers(c, "players"))))))
                 .then(Commands.literal("linker")
                         .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
-                                .executes(ShopCommands::linker))));
+                                .executes(ShopCommands::linker)))
+                .then(Commands.literal("licence")
+                        .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
+                                .then(Commands.argument("licence", StringArgumentType.string()).suggests(LICENCES)
+                                        .executes(ShopCommands::licence)))));
     }
 
     private static Shop shop(CommandContext<CommandSourceStack> c) {
@@ -83,6 +97,7 @@ public final class ShopCommands {
                     .append(", ").append(s.entries.size()).append(" article(s)");
             if (!s.allowCash) b.append(", sans espèces");
             if (!s.allowCard) b.append(", sans carte");
+            if (s.requiresLicence()) b.append(", licence : ").append(PermisCompat.name(s.licence));
         }
         String txt = b.toString();
         c.getSource().sendSuccess(() -> Component.literal(txt), false);
@@ -135,6 +150,29 @@ public final class ShopCommands {
         }
         for (ServerPlayer p : players) Network.openShop(p, s, -1);
         return players.size();
+    }
+
+    private static int licence(CommandContext<CommandSourceStack> c) {
+        Shop s = shop(c);
+        if (s == null) {
+            c.getSource().sendFailure(Component.literal("Boutique introuvable."));
+            return 0;
+        }
+        String lic = StringArgumentType.getString(c, "licence").trim();
+        if (lic.equalsIgnoreCase("aucune") || lic.equalsIgnoreCase("none")) lic = "";
+        if (!lic.isEmpty()) {
+            String err = AdminEditPacket.checkLicence(lic);
+            if (err != null) {
+                c.getSource().sendFailure(Component.literal(err));
+                return 0;
+            }
+        }
+        s.licence = lic;
+        ShopData.get(c.getSource().getServer()).changed();
+        String txt = lic.isEmpty() ? "« " + s.name + " » : plus aucune licence exigée."
+                : "« " + s.name + " » exige désormais : " + PermisCompat.name(lic) + ".";
+        c.getSource().sendSuccess(() -> Component.literal(txt), true);
+        return 1;
     }
 
     private static int linker(CommandContext<CommandSourceStack> c) throws CommandSyntaxException {

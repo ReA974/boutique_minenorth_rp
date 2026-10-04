@@ -133,7 +133,7 @@ public class ShopScreen extends Screen {
         top = (height - H) / 2;
         Shop shop = shop();
         ShopEntry e = selectedEntry();
-        boolean sel = e != null;
+        boolean sel = e != null && st.licenceOk;   // sans la licence : consultation seulement
         long total = total();
 
         btn(W - 80, 10, 66, 16, "Quitter", ShopButton.GHOST, this::onClose);
@@ -233,7 +233,15 @@ public class ShopScreen extends Screen {
         RenderSystem.enableBlend();
         g.blit(LOGO, left + 10, top + 4, 28, 28, 0, 0, 96, 96, 96, 96);
         drawScaled(g, bold(shop.name.toUpperCase(java.util.Locale.ROOT)), left + 44, top + 9, 1.6f, 180, 0xFFFFFFFF);
-        g.drawString(font, buy ? "Rachat d'objets" : "Boutique", left + 44, top + 24, CYAN, false);
+        String sub = buy ? "Rachat d'objets" : "Boutique";
+        g.drawString(font, sub, left + 44, top + 24, CYAN, false);
+        if (!st.licenceName.isEmpty()) {
+            // licence exigée : verte si le joueur l'a, rouge sinon
+            int lx = left + 44 + font.width(sub) + 6;
+            String lic = (st.licenceOk ? "✔ " : "✖ ") + st.licenceName;
+            g.drawString(font, font.plainSubstrByWidth(lic, left + W - 84 - lx), lx, top + 24,
+                    st.licenceOk ? 0xFF5FE0A0 : 0xFFFF5F6B, false);
+        }
 
         // colonne de gauche : argent du joueur
         g.drawString(font, "Espèces", left + 16, top + 44, CYAN, false);

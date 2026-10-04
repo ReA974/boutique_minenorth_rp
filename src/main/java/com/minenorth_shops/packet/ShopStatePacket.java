@@ -3,6 +3,7 @@ package com.minenorth_shops.packet;
 import com.minenorth_eurobank.Money;
 import com.minenorth_eurobank.api.BankApi;
 import com.minenorth_eurobank.api.PayResult;
+import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.ShopConfig;
 import com.minenorth_shops.client.ClientHooks;
 import com.minenorth_shops.shop.Shop;
@@ -28,6 +29,9 @@ public class ShopStatePacket {
     public int[] have = new int[0];
     public int maxLots = 64;
     public String message = "";
+    /** Nom de la licence exigée (vide = aucune) et si le joueur l'a. */
+    public String licenceName = "";
+    public boolean licenceOk = true;
 
     public static ShopStatePacket closed(String message) {
         ShopStatePacket m = new ShopStatePacket();
@@ -48,6 +52,11 @@ public class ShopStatePacket {
         m.have = new int[shop.entries.size()];
         for (int i = 0; i < m.have.length; i++) m.have[i] = ShopService.countMatching(p, shop.entries.get(i));
         m.maxLots = ShopConfig.MAX_LOTS.get();
+        if (shop.requiresLicence()) {
+            m.licenceName = PermisCompat.name(shop.licence);
+            m.licenceOk = PermisCompat.has(p, shop.licence);
+            if (open && !m.licenceOk && message.isEmpty()) message = PermisCompat.denial(p, shop.licence);
+        }
         m.message = message;
         return m;
     }
@@ -64,6 +73,8 @@ public class ShopStatePacket {
         b.writeUtf(m.cardIssue, 128);
         b.writeVarIntArray(m.have);
         b.writeVarInt(m.maxLots);
+        b.writeUtf(m.licenceName, 128);
+        b.writeBoolean(m.licenceOk);
     }
 
     public static ShopStatePacket decode(FriendlyByteBuf b) {
@@ -79,6 +90,8 @@ public class ShopStatePacket {
         m.cardIssue = b.readUtf(128);
         m.have = b.readVarIntArray();
         m.maxLots = b.readVarInt();
+        m.licenceName = b.readUtf(128);
+        m.licenceOk = b.readBoolean();
         return m;
     }
 

@@ -9,7 +9,7 @@ en **vente** ou en **rachat**, assignables à **n'importe quelle entité**. Paie
 1. Compiler EuroBank (`./gradlew build` dans `systemebanqueminenorth`).
 2. Copier `build/libs/minenorth_eurobank-1.0.0.jar` dans `libs/` de ce projet.
    (Autre version : changer `eurobank_version` dans `gradle.properties`.)
-3. `./gradlew build` → `build/libs/minenorth_shops-1.0.0.jar`.
+3. `./gradlew build` → `build/libs/minenorth_shops-1.1.0.jar`.
 4. Sur le serveur : mettre les **deux** jars dans `mods/` (côté client aussi, il y a des écrans).
 
 ## Utilisation (admins / op niveau 2)
@@ -22,6 +22,7 @@ en **vente** ou en **rachat**, assignables à **n'importe quelle entité**. Paie
 | Moyens de paiement | **Espèces : oui/non**, **Carte : oui/non** (en rachat : *Compte* = argent versé sur le compte) |
 | Ajouter un article | **Choisir dans l'inventaire** : votre inventaire s'affiche, cliquez l'objet (par défaut : l'objet en main). NBT conservé (enchantements, nom, données de mods). La quantité est préremplie avec la taille du tas. Mettre le prix du lot → **Ajouter** |
 | Modifier un article | Cliquer la ligne → changer prix/quantité → **Appliquer**. **Monter** = réordonner, **Retirer** = supprimer |
+| Licence requise | Bouton **Licence requise : …** : chaque clic passe à la licence suivante (liste lue dans la config de `minenorth_permis`), **Aucune** = retirer. Voir ci-dessous |
 | Tester | **Aperçu** ouvre la boutique comme un joueur |
 
 ### Assigner une boutique à une entité
@@ -37,10 +38,25 @@ N'importe quelle entité : villageois, armor stand, PNJ d'un autre mod, cadre, a
 Par défaut, l'entité devient invulnérable, immobile (IA coupée) et ne despawn plus. Retirer la boutique restaure ces
 réglages. Le tout est configurable.
 
+### Licence requise (mod MineNorth Permis)
+
+Une boutique peut exiger une licence de `minenorth_permis` (ex. port d'armes pour l'armurerie). Sans licence valide
+(possédée et non expirée), le joueur peut **consulter** la boutique mais ne peut ni acheter ni vendre : les boutons sont
+grisés, la licence s'affiche en rouge dans l'en-tête, et le serveur refuse toute transaction.
+
+- Dans le panneau : bouton **Licence requise** de la boutique.
+- En commande : `/shops licence <id> <licence>` (autocomplétion des licences), `/shops licence <id> aucune` pour retirer.
+- La licence s'applique à toute la boutique, en vente comme en rachat.
+
+`minenorth_permis` est une dépendance **optionnelle** (version 1.3.0 ou plus) : sans lui, le mod boutiques fonctionne
+normalement. Par sécurité, une boutique qui exige une licence est **bloquée** si le mod permis est absent (on ne vend
+pas d'armes à tout le monde à cause d'un jar manquant).
+
 ### Autres commandes
 
 - `/shops list` — liste des boutiques.
 - `/shops edit <id>` — ouvre l'édition.
+- `/shops licence <id> <licence|aucune>` — licence exigée pour commercer.
 - `/shops open <id> [joueurs]` — ouvre une boutique sans entité (blocs de commande, PNJ d'autres mods qui exécutent
   des commandes…).
 

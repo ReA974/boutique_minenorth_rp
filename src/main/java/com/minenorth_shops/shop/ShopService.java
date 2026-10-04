@@ -3,6 +3,7 @@ package com.minenorth_shops.shop;
 import com.minenorth_eurobank.Money;
 import com.minenorth_eurobank.api.BankApi;
 import com.minenorth_eurobank.api.PayResult;
+import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.ShopConfig;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -68,6 +69,8 @@ public final class ShopService {
      * @return message à afficher au joueur
      */
     public static String transact(ServerPlayer p, Shop shop, ShopEntry e, int lots, Method method) {
+        String denied = PermisCompat.denial(p, shop.licence);
+        if (denied != null) return denied;
         if (lots == -1) lots = maxLots(p, shop, e);
         if (lots <= 0) return shop.mode == ShopMode.BUY ? "Vous n'avez pas assez de cet objet." : "Fonds insuffisants.";
         lots = Math.min(lots, ShopConfig.MAX_LOTS.get());

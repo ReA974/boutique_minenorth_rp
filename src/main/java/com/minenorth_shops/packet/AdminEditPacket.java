@@ -2,6 +2,7 @@ package com.minenorth_shops.packet;
 
 import com.minenorth_eurobank.Money;
 import com.minenorth_shops.Network;
+import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.items.ShopLinkerItem;
 import com.minenorth_shops.shop.Shop;
 import com.minenorth_shops.shop.ShopData;
@@ -18,7 +19,8 @@ import java.util.function.Supplier;
 public class AdminEditPacket {
     public enum Op {
         OPEN, CLOSE, CREATE, DELETE, RENAME, TOGGLE_MODE, TOGGLE_CASH, TOGGLE_CARD,
-        ADD_ENTRY /* entryId = slot */, UPDATE_ENTRY, REMOVE_ENTRY, MOVE_UP, LINKER, PREVIEW
+        ADD_ENTRY /* entryId = slot */, UPDATE_ENTRY, REMOVE_ENTRY, MOVE_UP, LINKER, PREVIEW,
+        SET_LICENCE /* text = id de licence, vide = aucune */
     }
 
     public static final int MAX_QTY = 4096;
@@ -91,6 +93,14 @@ public class AdminEditPacket {
         return s.length() > Shop.MAX_NAME ? s.substring(0, Shop.MAX_NAME) : s;
     }
 
+    /** null si l'id est acceptable, sinon le message d'erreur. Partagé avec la commande /shops licence. */
+    public static String checkLicence(String lic) {
+        if (!lic.matches("[A-Za-z0-9_.:-]{1,64}")) return "Identifiant de licence invalide.";
+        if (!PermisCompat.available()) return "Le mod minenorth_permis n'est pas installé sur le serveur.";
+        boolean known = PermisCompat.licences().stream().anyMatch(l -> l.id().equals(lic));
+        return known ? null : "Licence inconnue : " + lic + " (voir la config de minenorth_permis).";
+    }
+
     private static String apply(ServerPlayer p, AdminEditPacket m, int[] focus) {
         ShopData d = ShopData.get(p.server);
 
@@ -131,6 +141,19 @@ public class AdminEditPacket {
                 s.allowCard = !s.allowCard;
                 d.changed();
                 return "Carte " + (s.allowCard ? "acceptée." : "refusée.");
+            }
+            case SET_LICENCE -> {
+                String lic = m.text.trim();
+                if (lic.isEmpty()) {
+                    s.licence = "";
+                    d.changed();
+                    return "Plus aucune licence exigée.";
+                }
+                String err = checkLicence(lic);
+                if (err != null) return err;
+                s.licence = lic;
+                d.changed();
+                return "Licence exigée : " + PermisCompat.name(lic) + ".";
             }
             case ADD_ENTRY -> {
                 if (s.entries.size() >= Shop.MAX_ENTRIES) return "Maximum " + Shop.MAX_ENTRIES + " articles par boutique.";

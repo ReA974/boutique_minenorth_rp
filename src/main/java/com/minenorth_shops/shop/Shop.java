@@ -19,6 +19,8 @@ public class Shop {
     public ShopMode mode = ShopMode.SELL;
     public boolean allowCash = true;
     public boolean allowCard = true;
+    /** Licence (mod minenorth_permis) exigée pour acheter / vendre ici. Vide = aucune. */
+    public String licence = "";
     public final List<ShopEntry> entries = new ArrayList<>();
     private int nextEntryId = 1;
 
@@ -31,6 +33,10 @@ public class Shop {
         ShopEntry e = new ShopEntry(nextEntryId++, item, qty, price);
         entries.add(e);
         return e;
+    }
+
+    public boolean requiresLicence() {
+        return licence != null && !licence.isBlank();
     }
 
     @Nullable
@@ -46,6 +52,7 @@ public class Shop {
         t.putString("Mode", mode.name());
         t.putBoolean("Cash", allowCash);
         t.putBoolean("Card", allowCard);
+        t.putString("Licence", licence);
         t.putInt("NextEntry", nextEntryId);
         ListTag list = new ListTag();
         for (ShopEntry e : entries) list.add(e.save());
@@ -62,6 +69,7 @@ public class Shop {
         }
         s.allowCash = t.getBoolean("Cash");
         s.allowCard = t.getBoolean("Card");
+        s.licence = t.getString("Licence");   // "" pour les anciennes sauvegardes
         s.nextEntryId = Math.max(1, t.getInt("NextEntry"));
         ListTag list = t.getList("Entries", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -78,6 +86,7 @@ public class Shop {
         b.writeEnum(mode);
         b.writeBoolean(allowCash);
         b.writeBoolean(allowCard);
+        b.writeUtf(licence, 64);
         b.writeVarInt(entries.size());
         for (ShopEntry e : entries) e.write(b);
     }
@@ -87,6 +96,7 @@ public class Shop {
         s.mode = b.readEnum(ShopMode.class);
         s.allowCash = b.readBoolean();
         s.allowCard = b.readBoolean();
+        s.licence = b.readUtf(64);
         int n = b.readVarInt();
         for (int i = 0; i < n; i++) s.entries.add(ShopEntry.read(b));
         return s;
