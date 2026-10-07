@@ -57,6 +57,7 @@ pas d'armes à tout le monde à cause d'un jar manquant).
 - `/shops list` — liste des boutiques.
 - `/shops edit <id>` — ouvre l'édition.
 - `/shops licence <id> <licence|aucune>` — licence exigée pour commercer.
+- `/shops police <id> <tous|policier|officier|commissaire>` — boutique réservée à la police.
 - `/shops open <id> [joueurs]` — ouvre une boutique sans entité (blocs de commande, PNJ d'autres mods qui exécutent
   des commandes…).
 
@@ -82,7 +83,19 @@ solde suffisant. En rachat, les outils abîmés ne sont pas repris ; si l'articl
     lotsMax = 64             # lots max par transaction
 ```
 
-Les boutiques sont sauvegardées dans `world/data/minenorth_shops.dat`.
+Toutes les boutiques sont dans **`config/minenorth_shops/shops.json`** (un seul fichier, modifiable à la main).
+Il est créé au premier lancement à partir des boutiques existantes (`world/data/minenorth_shops.dat`), réécrit à chaque
+modification en jeu et **rechargé automatiquement** quand tu le modifies (pas de redémarrage). Si le JSON est invalide,
+les boutiques en mémoire sont conservées et une copie `shops.json.broken-…` est faite.
+
+```json
+{ "nextId": 2, "shops": [ {
+  "id": 1, "name": "Armurerie", "mode": "SELL", "allowCash": true, "allowCard": true,
+  "licence": "port_armes", "policeGrade": -1,
+  "entries": [ { "id": 1, "item": "minecraft:iron_sword", "nbt": "{Damage:0}", "quantity": 1, "price": 1500 } ]
+} ] }
+```
+Prix en centimes (1500 = 15,00 €). `nbt` est optionnel (SNBT). Un article dont l'objet est inconnu est ignoré (log).
 
 ## Notes techniques
 
@@ -91,3 +104,21 @@ Les boutiques sont sauvegardées dans `world/data/minenorth_shops.dat`.
 - L'id de la boutique est stocké dans les données persistantes de l'entité (`minenorth_shops:shop`).
 - En rachat, le versement sur compte utilise `BankApi.refund`. Un alias `BankApi.deposit(p, cents)` dans EuroBank
   serait plus lisible.
+
+### Boutique réservée à la police (mod MineNorth Police)
+
+Une boutique peut être réservée aux policiers enregistrés (`/police grade`), avec un grade minimum :
+
+| Réglage | Qui peut l'ouvrir et acheter |
+|---|---|
+| Police : non | tout le monde (défaut) |
+| Police : oui | tout policier (Sous-officier et +) |
+| Police : off.+ | Officier et Commissaire |
+| Police : comm. | Commissaire uniquement |
+
+- Dans le panneau : bouton **Police : …** de la boutique (chaque clic passe au réglage suivant).
+- En commande : `/shops police <id> <tous|policier|officier|commissaire>`.
+- Un non-policier qui clique sur le PNJ reçoit « Cette boutique est réservée à la police. » et rien ne s'ouvre.
+  Les ops peuvent l'ouvrir pour la consulter, mais pas y acheter sans grade.
+- Cumulable avec la licence et le choix espèces / carte.
+- Par sécurité, une boutique police est **bloquée** si le mod Police est absent.

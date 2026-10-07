@@ -1,5 +1,8 @@
 package com.minenorth_shops.shop;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -21,6 +24,8 @@ public class Shop {
     public boolean allowCard = true;
     /** Licence (mod minenorth_permis) exigée pour acheter / vendre ici. Vide = aucune. */
     public String licence = "";
+    /** Réservée à la police (mod minenorthpolice) : -1 = tout le monde, sinon grade minimum (0 = Commissaire, 1 = Officier, 2 = tout policier). */
+    public int policeGrade = -1;
     public final List<ShopEntry> entries = new ArrayList<>();
     private int nextEntryId = 1;
 
@@ -33,6 +38,10 @@ public class Shop {
         ShopEntry e = new ShopEntry(nextEntryId++, item, qty, price);
         entries.add(e);
         return e;
+    }
+
+    public boolean policeOnly() {
+        return policeGrade >= 0;
     }
 
     public boolean requiresLicence() {
@@ -53,6 +62,7 @@ public class Shop {
         t.putBoolean("Cash", allowCash);
         t.putBoolean("Card", allowCard);
         t.putString("Licence", licence);
+        t.putInt("Police", policeGrade);
         t.putInt("NextEntry", nextEntryId);
         ListTag list = new ListTag();
         for (ShopEntry e : entries) list.add(e.save());
@@ -70,12 +80,56 @@ public class Shop {
         s.allowCash = t.getBoolean("Cash");
         s.allowCard = t.getBoolean("Card");
         s.licence = t.getString("Licence");   // "" pour les anciennes sauvegardes
+        s.policeGrade = t.contains("Police") ? Math.max(-1, Math.min(2, t.getInt("Police"))) : -1;
         s.nextEntryId = Math.max(1, t.getInt("NextEntry"));
         ListTag list = t.getList("Entries", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             ShopEntry e = ShopEntry.load(list.getCompound(i));
             if (!e.item.isEmpty()) s.entries.add(e);
             s.nextEntryId = Math.max(s.nextEntryId, e.id + 1);
+        }
+        return s;
+    }
+
+    public JsonObject toJson() {
+        JsonObject o = new JsonObject();
+        o.addProperty("id", id);
+        o.addProperty("name", name);
+        o.addProperty("mode", mode.name());
+        o.addProperty("allowCash", allowCash);
+        o.addProperty("allowCard", allowCard);
+        o.addProperty("licence", licence);
+        o.addProperty("policeGrade", policeGrade);
+        JsonArray arr = new JsonArray();
+        for (ShopEntry e : entries) arr.add(e.toJson());
+        o.add("entries", arr);
+        return o;
+    }
+
+    public static Shop fromJson(JsonObject o) {
+        Shop s = new Shop(o.get("id").getAsInt(), o.has("name") ? o.get("name").getAsString() : "Boutique");
+        try {
+            if (o.has("mode")) s.mode = ShopMode.valueOf(o.get("mode").getAsString().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            s.mode = ShopMode.SELL;
+        }
+        if (o.has("allowCash")) s.allowCash = o.get("allowCash").getAsBoolean();
+        if (o.has("allowCard")) s.allowCard = o.get("allowCard").getAsBoolean();
+        if (o.has("licence")) s.licence = o.get("licence").getAsString();
+        if (o.has("policeGrade")) s.policeGrade = Math.max(-1, Math.min(2, o.get("policeGrade").getAsInt()));
+        if (o.has("entries")) {
+            for (JsonElement el : o.getAsJsonArray("entries")) {
+                ShopEntry e = ShopEntry.fromJson(el.getAsJsonObject());
+                if (e == null) {
+                    ShopData.LOGGER.warn("[Boutiques] Article ignoré dans « {} » (objet ou NBT invalide) : {}", s.name, el);
+                    continue;
+                }
+                if (e.id <= 0 || s.entry(e.id) != null) {   // id absent ou en double -> on en attribue un nouveau
+                    e = new ShopEntry(s.nextEntryId, e.item, e.quantity, e.price);
+                }
+                s.entries.add(e);
+                s.nextEntryId = Math.max(s.nextEntryId, e.id + 1);
+            }
         }
         return s;
     }
@@ -87,6 +141,7 @@ public class Shop {
         b.writeBoolean(allowCash);
         b.writeBoolean(allowCard);
         b.writeUtf(licence, 64);
+        b.writeByte(policeGrade);
         b.writeVarInt(entries.size());
         for (ShopEntry e : entries) e.write(b);
     }
@@ -97,6 +152,7 @@ public class Shop {
         s.allowCash = b.readBoolean();
         s.allowCard = b.readBoolean();
         s.licence = b.readUtf(64);
+        s.policeGrade = b.readByte();
         int n = b.readVarInt();
         for (int i = 0; i < n; i++) s.entries.add(ShopEntry.read(b));
         return s;

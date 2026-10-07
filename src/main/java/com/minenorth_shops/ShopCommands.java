@@ -33,6 +33,7 @@ import java.util.Collection;
  * /shops open <id> [joueurs]           ouvre la boutique pour des joueurs (blocs de commande, PNJ d'autres mods...)
  * /shops linker <id>                   donne l'outil de liaison
  * /shops licence <id> <licence|aucune> licence (mod minenorth_permis) exigée pour commercer
+ * /shops police <id> <tous|policier|officier|commissaire> boutique réservée à la police (grade minimum)
  */
 public final class ShopCommands {
     private ShopCommands() {}
@@ -73,7 +74,13 @@ public final class ShopCommands {
                 .then(Commands.literal("licence")
                         .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
                                 .then(Commands.argument("licence", StringArgumentType.string()).suggests(LICENCES)
-                                        .executes(ShopCommands::licence)))));
+                                        .executes(ShopCommands::licence))))
+                .then(Commands.literal("police")
+                        .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
+                                .then(Commands.argument("acces", StringArgumentType.word())
+                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(
+                                                java.util.List.of("tous", "policier", "officier", "commissaire"), b))
+                                        .executes(ShopCommands::police)))));
     }
 
     private static Shop shop(CommandContext<CommandSourceStack> c) {
@@ -88,7 +95,7 @@ public final class ShopCommands {
     private static int list(CommandContext<CommandSourceStack> c) {
         Collection<Shop> all = ShopData.get(c.getSource().getServer()).all();
         if (all.isEmpty()) {
-            c.getSource().sendSuccess(() -> Component.literal("Aucune boutique. Créez-en une avec /shops."), false);
+            c.getSource().sendSystemMessage(Component.literal("Aucune boutique. Créez-en une avec /shops."));
             return 0;
         }
         StringBuilder b = new StringBuilder("Boutiques :");
@@ -98,9 +105,10 @@ public final class ShopCommands {
             if (!s.allowCash) b.append(", sans espèces");
             if (!s.allowCard) b.append(", sans carte");
             if (s.requiresLicence()) b.append(", licence : ").append(PermisCompat.name(s.licence));
+            if (s.policeOnly()) b.append(", ").append(PoliceCompat.label(s.policeGrade));
         }
         String txt = b.toString();
-        c.getSource().sendSuccess(() -> Component.literal(txt), false);
+        c.getSource().sendSystemMessage(Component.literal(txt));
         return all.size();
     }
 
@@ -117,7 +125,7 @@ public final class ShopCommands {
             n++;
         }
         int count = n;
-        c.getSource().sendSuccess(() -> Component.literal("« " + s.name + " » assignée à " + count + " entité(s)."), true);
+        c.getSource().sendSystemMessage(Component.literal("« " + s.name + " » assignée à " + count + " entité(s)."));
         return n;
     }
 
@@ -125,7 +133,7 @@ public final class ShopCommands {
         int n = 0;
         for (Entity e : EntityArgument.getEntities(c, "targets")) if (EntityLinks.unlink(e)) n++;
         int count = n;
-        c.getSource().sendSuccess(() -> Component.literal("Boutique retirée de " + count + " entité(s)."), true);
+        c.getSource().sendSystemMessage(Component.literal("Boutique retirée de " + count + " entité(s)."));
         return n;
     }
 
@@ -138,7 +146,7 @@ public final class ShopCommands {
                 : e.getDisplayName().getString() + " → #" + id + " " + s.name + " (" + s.mode.label + ", "
                 + s.entries.size() + " articles"
                 + (s.entries.isEmpty() ? "" : ", dès " + Money.format(s.entries.stream().mapToLong(x -> x.price).min().orElse(0))) + ")";
-        c.getSource().sendSuccess(() -> Component.literal(txt), false);
+        c.getSource().sendSystemMessage(Component.literal(txt));
         return id < 0 ? 0 : 1;
     }
 
@@ -171,7 +179,34 @@ public final class ShopCommands {
         ShopData.get(c.getSource().getServer()).changed();
         String txt = lic.isEmpty() ? "« " + s.name + " » : plus aucune licence exigée."
                 : "« " + s.name + " » exige désormais : " + PermisCompat.name(lic) + ".";
-        c.getSource().sendSuccess(() -> Component.literal(txt), true);
+        c.getSource().sendSystemMessage(Component.literal(txt));
+        return 1;
+    }
+
+    private static int police(CommandContext<CommandSourceStack> c) {
+        Shop s = shop(c);
+        if (s == null) {
+            c.getSource().sendFailure(Component.literal("Boutique introuvable."));
+            return 0;
+        }
+        String a = StringArgumentType.getString(c, "acces").toLowerCase(java.util.Locale.ROOT);
+        int g = switch (a) {
+            case "tous", "aucun", "none" -> -1;
+            case "policier", "police", "sousofficier", "sous-officier" -> 2;
+            case "officier" -> 1;
+            case "commissaire" -> 0;
+            default -> -2;
+        };
+        if (g == -2) {
+            c.getSource().sendFailure(Component.literal("Accès inconnu : tous, policier, officier ou commissaire."));
+            return 0;
+        }
+        s.policeGrade = g;
+        ShopData.get(c.getSource().getServer()).changed();
+        String txt = g < 0 ? "« " + s.name + " » est ouverte à tout le monde."
+                : "« " + s.name + " » est réservée : " + PoliceCompat.label(g) + "."
+                + (PoliceCompat.available() ? "" : " (mod Police absent : boutique bloquée)");
+        c.getSource().sendSystemMessage(Component.literal(txt));
         return 1;
     }
 
@@ -184,7 +219,7 @@ public final class ShopCommands {
         ServerPlayer p = c.getSource().getPlayerOrException();
         ItemStack tool = ShopLinkerItem.create(s);
         if (!p.getInventory().add(tool)) p.drop(tool, false);
-        c.getSource().sendSuccess(() -> Component.literal("Outil de liaison pour « " + s.name + " » donné."), false);
+        c.getSource().sendSystemMessage(Component.literal("Outil de liaison pour « " + s.name + " » donné."));
         return 1;
     }
 }

@@ -1,9 +1,10 @@
 package com.minenorth_shops.shop;
 
 import com.minenorth_eurobank.Money;
-import com.minenorth_eurobank.api.BankApi;
-import com.minenorth_eurobank.api.PayResult;
+import fr.minenorth.api.MineNorth;
+import fr.minenorth.api.PayResult;
 import com.minenorth_shops.PermisCompat;
+import com.minenorth_shops.PoliceCompat;
 import com.minenorth_shops.ShopConfig;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -60,7 +61,7 @@ public final class ShopService {
         int cap = ShopConfig.MAX_LOTS.get();
         if (shop.mode == ShopMode.BUY) return Math.min(cap, countMatching(p, e) / Math.max(1, e.quantity));
         if (e.price <= 0) return cap;
-        long money = Math.max(shop.allowCash ? Money.cashIn(p) : 0, shop.allowCard ? BankApi.balance(p) : 0);
+        long money = Math.max(shop.allowCash ? Money.cashIn(p) : 0, shop.allowCard ? MineNorth.bank().balance(p.server, p.getUUID()) : 0);
         return (int) Math.min(cap, money / e.price);
     }
 
@@ -69,6 +70,8 @@ public final class ShopService {
      * @return message à afficher au joueur
      */
     public static String transact(ServerPlayer p, Shop shop, ShopEntry e, int lots, Method method) {
+        String police = PoliceCompat.denial(p, shop);
+        if (police != null) return police;
         String denied = PermisCompat.denial(p, shop.licence);
         if (denied != null) return denied;
         if (lots == -1) lots = maxLots(p, shop, e);
@@ -86,6 +89,7 @@ public final class ShopService {
             return "Quantité trop grande.";
         }
         String what = items + "x " + e.item.getHoverName().getString();
+        String source = "boutique:" + shop.id;
 
         if (shop.mode == ShopMode.SELL) {
             if (method == Method.CASH) {
@@ -94,9 +98,10 @@ public final class ShopService {
                 if (total > 0) {
                     long taken = Money.takeAllCash(p);
                     Money.giveCash(p, taken - total);   // rendu de monnaie
+                    MineNorth.treasury().collect(p.server, total, source);
                 }
             } else if (total > 0) {
-                PayResult r = BankApi.charge(p, total);
+                PayResult r = MineNorth.bank().charge(p, total, source);
                 if (r != PayResult.OK) return r.message();
             }
             giveItems(p, e, items);
@@ -105,11 +110,16 @@ public final class ShopService {
 
         // boutique en RACHAT : le joueur vend
         if (countMatching(p, e) < items) return "Il vous faut " + what + ".";
-        if (method == Method.CARD && !BankApi.hasAccount(p)) return PayResult.NO_ACCOUNT.message();
+        if (method == Method.CARD && !MineNorth.bank().hasAccount(p.server, p.getUUID())) return PayResult.NO_ACCOUNT.message();
         removeMatching(p, e, items);
         if (total > 0) {
-            if (method == Method.CASH) Money.giveCash(p, total);
-            else BankApi.refund(p, total);   // crédite le compte
+            // Rachat : c'est le trésor public qui paie le joueur.
+            if (method == Method.CASH) {
+                Money.giveCash(p, total);
+                MineNorth.treasury().collect(p.server, -total, source);
+            } else {
+                MineNorth.bank().refund(p.server, p.getUUID(), total, source);   // crédite le compte, repris au trésor
+            }
         }
         p.containerMenu.broadcastChanges();
         return "Vente : " + what + " pour " + Money.format(total)

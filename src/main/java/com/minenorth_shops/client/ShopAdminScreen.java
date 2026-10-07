@@ -271,11 +271,15 @@ public class ShopAdminScreen extends Screen {
         if (s.requiresLicence()) licLabel = "Licence requise : " + licenceName(s.licence);
         else if (!permis) licLabel = "Licence : mod permis absent";
         else licLabel = "Licence requise : aucune";
-        btn(16, 78, 210, 18, licLabel, s.requiresLicence() ? ShopButton.GREEN : ShopButton.DARK,
+        btn(16, 78, 150, 18, font.plainSubstrByWidth(licLabel, 144), s.requiresLicence() ? ShopButton.GREEN : ShopButton.DARK,
                 () -> send(Op.SET_LICENCE, s.id, 0, nextLicence(s.licence), 0, 0))
                 .enabled(permis && !licences.isEmpty());
-        btn(230, 78, 74, 18, "Aucune", ShopButton.GHOST, () -> send(Op.SET_LICENCE, s.id, 0, "", 0, 0))
+        btn(170, 78, 50, 18, "Aucune", ShopButton.GHOST, () -> send(Op.SET_LICENCE, s.id, 0, "", 0, 0))
                 .enabled(s.requiresLicence());
+        // réservée à la police (mod minenorthpolice) : clic = non -> tout policier (oui) -> officier et + -> commissaire -> non
+        String[] police = {"Police : comm.", "Police : off.+", "Police : oui"};
+        btn(224, 78, 80, 18, s.policeOnly() ? police[Math.max(0, Math.min(2, s.policeGrade))] : "Police : non",
+                s.policeOnly() ? ShopButton.PINK : ShopButton.DARK, () -> send(Op.CYCLE_POLICE, s.id));
 
         int maxOffset = Math.max(0, s.entries.size() - E_ROWS);
         btn(LIST_X + LIST_W + 2, E_Y, 14, E_ROWS * E_ROW_H / 2 - 1, "^", ShopButton.DARK, () -> offset = Math.max(0, offset - 1))
@@ -500,7 +504,7 @@ public class ShopAdminScreen extends Screen {
             boolean sel = sh.id == selectedShop;
             if (sel) g.fill(x, y, x + LIST_W, y + L_ROW_H, CYAN);
             else if (mx >= x && mx < x + LIST_W && my >= y && my < y + L_ROW_H) g.fill(x, y, x + LIST_W, y + L_ROW_H, HOVER);
-            String right = (sh.requiresLicence() ? "Licence · " : "") + sh.mode.label + " · " + sh.entries.size() + " art.";
+            String right = (sh.policeOnly() ? "Police · " : "") + (sh.requiresLicence() ? "Licence · " : "") + sh.mode.label + " · " + sh.entries.size() + " art.";
             int rw = font.width(right);
             g.drawString(font, "#" + sh.id, x + 4, y + 4, sel ? 0xFFFFFFFF : DIM, false);
             g.drawString(font, font.plainSubstrByWidth(sh.name, LIST_W - rw - 40), x + 30, y + 4, 0xFFFFFFFF, false);

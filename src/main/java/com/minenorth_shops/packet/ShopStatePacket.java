@@ -1,9 +1,10 @@
 package com.minenorth_shops.packet;
 
 import com.minenorth_eurobank.Money;
-import com.minenorth_eurobank.api.BankApi;
-import com.minenorth_eurobank.api.PayResult;
+import fr.minenorth.api.MineNorth;
+import fr.minenorth.api.PayResult;
 import com.minenorth_shops.PermisCompat;
+import com.minenorth_shops.PoliceCompat;
 import com.minenorth_shops.ShopConfig;
 import com.minenorth_shops.client.ClientHooks;
 import com.minenorth_shops.shop.Shop;
@@ -45,9 +46,9 @@ public class ShopStatePacket {
         m.open = open;
         m.shop = shop;
         m.cash = Money.cashIn(p);
-        m.hasAccount = BankApi.hasAccount(p);
-        m.balance = BankApi.balance(p);
-        PayResult r = BankApi.check(p, 1);
+        m.hasAccount = MineNorth.bank().hasAccount(p.server, p.getUUID());
+        m.balance = MineNorth.bank().balance(p.server, p.getUUID());
+        PayResult r = MineNorth.bank().check(p, 1);
         m.cardIssue = r == PayResult.OK || r == PayResult.INSUFFICIENT_FUNDS ? "" : r.message();
         m.have = new int[shop.entries.size()];
         for (int i = 0; i < m.have.length; i++) m.have[i] = ShopService.countMatching(p, shop.entries.get(i));
@@ -56,6 +57,10 @@ public class ShopStatePacket {
             m.licenceName = PermisCompat.name(shop.licence);
             m.licenceOk = PermisCompat.has(p, shop.licence);
             if (open && !m.licenceOk && message.isEmpty()) message = PermisCompat.denial(p, shop.licence);
+        }
+        if (open && message.isEmpty()) {
+            String police = PoliceCompat.denial(p, shop);
+            if (police != null) message = police;
         }
         m.message = message;
         return m;

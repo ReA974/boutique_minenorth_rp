@@ -3,6 +3,7 @@ package com.minenorth_shops.packet;
 import com.minenorth_eurobank.Money;
 import com.minenorth_shops.Network;
 import com.minenorth_shops.PermisCompat;
+import com.minenorth_shops.PoliceCompat;
 import com.minenorth_shops.items.ShopLinkerItem;
 import com.minenorth_shops.shop.Shop;
 import com.minenorth_shops.shop.ShopData;
@@ -20,7 +21,8 @@ public class AdminEditPacket {
     public enum Op {
         OPEN, CLOSE, CREATE, DELETE, RENAME, TOGGLE_MODE, TOGGLE_CASH, TOGGLE_CARD,
         ADD_ENTRY /* entryId = slot */, UPDATE_ENTRY, REMOVE_ENTRY, MOVE_UP, LINKER, PREVIEW,
-        SET_LICENCE /* text = id de licence, vide = aucune */
+        SET_LICENCE /* text = id de licence, vide = aucune */,
+        CYCLE_POLICE /* tout le monde -> police (tous grades) -> officier et + -> commissaire -> tout le monde */
     }
 
     public static final int MAX_QTY = 4096;
@@ -154,6 +156,13 @@ public class AdminEditPacket {
                 s.licence = lic;
                 d.changed();
                 return "Licence exigée : " + PermisCompat.name(lic) + ".";
+            }
+            case CYCLE_POLICE -> {
+                s.policeGrade = s.policeGrade < 0 ? 2 : s.policeGrade - 1;
+                d.changed();
+                if (!s.policeOnly()) return "Boutique ouverte à tout le monde.";
+                return "Réservée : " + PoliceCompat.label(s.policeGrade) + "."
+                        + (PoliceCompat.available() ? "" : " Attention : mod Police absent, boutique bloquée.");
             }
             case ADD_ENTRY -> {
                 if (s.entries.size() >= Shop.MAX_ENTRIES) return "Maximum " + Shop.MAX_ENTRIES + " articles par boutique.";

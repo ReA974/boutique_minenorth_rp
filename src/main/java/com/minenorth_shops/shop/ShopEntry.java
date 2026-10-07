@@ -1,6 +1,12 @@
 package com.minenorth_shops.shop;
 
+import com.google.gson.JsonObject;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.item.ItemStack;
 
@@ -36,6 +42,34 @@ public class ShopEntry {
 
     public static ShopEntry load(CompoundTag t) {
         return new ShopEntry(t.getInt("Id"), ItemStack.of(t.getCompound("Item")), Math.max(1, t.getInt("Qty")), t.getLong("Price"));
+    }
+
+    /** Format JSON : {"id":1,"item":"minecraft:iron_sword","nbt":"{...}","quantity":1,"price":1500} (prix en centimes). */
+    public JsonObject toJson() {
+        JsonObject o = new JsonObject();
+        o.addProperty("id", id);
+        ResourceLocation key = ForgeRegistries.ITEMS.getKey(item.getItem());
+        o.addProperty("item", key == null ? "minecraft:air" : key.toString());
+        if (item.getTag() != null && !item.getTag().isEmpty()) o.addProperty("nbt", item.getTag().toString());
+        o.addProperty("quantity", quantity);
+        o.addProperty("price", price);
+        return o;
+    }
+
+    /** @return null si l'objet est inconnu (mod absent, faute de frappe...) ou le NBT invalide. */
+    public static ShopEntry fromJson(JsonObject o) {
+        ResourceLocation rl = ResourceLocation.tryParse(o.get("item").getAsString());
+        Item it = rl == null ? Items.AIR : ForgeRegistries.ITEMS.getValue(rl);
+        if (it == null || it == Items.AIR) return null;
+        ItemStack st = new ItemStack(it);
+        try {
+            if (o.has("nbt")) st.setTag(TagParser.parseTag(o.get("nbt").getAsString()));
+        } catch (Exception ex) {
+            return null;
+        }
+        int qty = o.has("quantity") ? Math.max(1, o.get("quantity").getAsInt()) : 1;
+        long price = o.has("price") ? Math.max(0, o.get("price").getAsLong()) : 0;
+        return new ShopEntry(o.has("id") ? o.get("id").getAsInt() : 0, st, qty, price);
     }
 
     public void write(FriendlyByteBuf b) {
