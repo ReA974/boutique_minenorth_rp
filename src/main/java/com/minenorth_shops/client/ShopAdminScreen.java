@@ -54,8 +54,8 @@ public class ShopAdminScreen extends Screen {
     private int offset;
     private boolean confirmDelete;
 
-    private String createText = "", renameText = "", priceText = "", qtyText = "1";
-    private EditBox createBox, renameBox, priceBox, qtyBox;
+    private String createText = "", renameText = "", priceText = "", qtyText = "1", catText = "";
+    private EditBox createBox, renameBox, priceBox, qtyBox, catBox;
 
     // sélecteur d'objet dans l'inventaire de l'admin
     private static final int PICK_X = 79, PICK_Y = 70, CELL = 18;
@@ -77,7 +77,7 @@ public class ShopAdminScreen extends Screen {
     public void update(AdminSyncPacket m) {
         EditBox focused = getFocused() instanceof EditBox b ? b : null;
         String focusName = focused == null ? null : focused == createBox ? "create" : focused == renameBox ? "rename"
-                : focused == priceBox ? "price" : focused == qtyBox ? "qty" : null;
+                : focused == priceBox ? "price" : focused == qtyBox ? "qty" : focused == catBox ? "cat" : null;
         saveTexts();
         this.shops = m.shops;
         this.permis = m.permis;
@@ -97,6 +97,7 @@ public class ShopAdminScreen extends Screen {
             case "create" -> createBox;
             case "rename" -> renameBox;
             case "price" -> priceBox;
+            case "cat" -> catBox;
             default -> qtyBox;
         };
         if (target != null) setFocused(target);
@@ -133,6 +134,7 @@ public class ShopAdminScreen extends Screen {
         renameText = s.name;
         priceText = "";
         qtyText = "1";
+        catText = "";
         pickedSlot = -1;
         picking = false;
     }
@@ -142,6 +144,7 @@ public class ShopAdminScreen extends Screen {
         if (renameBox != null) renameText = renameBox.getValue();
         if (priceBox != null) priceText = priceBox.getValue();
         if (qtyBox != null) qtyText = qtyBox.getValue();
+        if (catBox != null) catText = catBox.getValue();
     }
 
     private void send(Op op, int shopId, int entryId, String text, long price, int qty) {
@@ -183,7 +186,8 @@ public class ShopAdminScreen extends Screen {
             return;
         }
                 // ADD_ENTRY : entryId = emplacement d'inventaire choisi (lu côté serveur, NBT complet)
-        send(op, editing, op == Op.ADD_ENTRY ? effectiveSlot() : selectedEntry, "", price, qty);
+        // text = rubrique de l'article (vide = sans rubrique)
+        send(op, editing, op == Op.ADD_ENTRY ? effectiveSlot() : selectedEntry, catBox.getValue(), price, qty);
     }
 
     // ---------- widgets ----------
@@ -204,7 +208,7 @@ public class ShopAdminScreen extends Screen {
     protected void init() {
         left = (width - W) / 2;
         top = (height - H) / 2;
-        createBox = renameBox = priceBox = qtyBox = null;
+        createBox = renameBox = priceBox = qtyBox = catBox = null;
         if (shop(editing) == null) picking = false;
         if (picking) initPicker();
         else if (shop(editing) != null) initEdit(shop(editing));
@@ -290,7 +294,8 @@ public class ShopAdminScreen extends Screen {
         priceBox = box(16, 178, 64, "Prix/lot €", priceText, 12);
         qtyBox = box(84, 178, 40, "Qté", qtyText, 4);
         // aperçu de l'objet choisi (dessiné dans renderEdit) + bouton du sélecteur
-        btn(150, 177, 154, 18, pickedSlot < 0 ? "Choisir dans l'inventaire" : "Changer d'objet", ShopButton.DARK, () -> {
+        catBox = box(226, 178, 78, "Rubrique", catText, 20);
+        btn(150, 177, 72, 18, pickedSlot < 0 ? "Inventaire" : "Changer", ShopButton.DARK, () -> {
             saveTexts();
             picking = true;
             rebuildWidgets();
@@ -430,6 +435,7 @@ public class ShopAdminScreen extends Screen {
                 selectedEntry = e.id;
                 priceText = euros(e.price);
                 qtyText = String.valueOf(e.quantity);
+                catText = e.category;
             } else {
                 int id = shops.get(idx).id;
                 if (id == selectedShop && button == 0 && confirmDelete == false && lastClickId == id
@@ -538,7 +544,7 @@ public class ShopAdminScreen extends Screen {
             if (inRow && mx < x + 18) hovered = e;
             String right = "x" + e.quantity + "   " + Money.format(e.price);
             int rw = font.width(right);
-            String name = e.item.getHoverName().getString() + (e.item.hasTag() ? " *" : "");
+            String name = (e.category.isEmpty() ? "" : "[" + e.category + "] ") + e.item.getHoverName().getString() + (e.item.hasTag() ? " *" : "");
             g.drawString(font, font.plainSubstrByWidth(name, LIST_W - rw - 30), x + 20, y + 5, 0xFFFFFFFF, false);
             g.drawString(font, right, x + LIST_W - 4 - rw, y + 5, 0xFFFFFFFF, false);
         }
@@ -546,6 +552,10 @@ public class ShopAdminScreen extends Screen {
             g.drawString(font, "Aucun article. Choisissez un objet de votre inventaire,", left + LIST_X + 6, top + E_Y + 4, TEXT, false);
             g.drawString(font, "indiquez prix et quantité, puis « Ajouter ».", left + LIST_X + 6, top + E_Y + 14, TEXT, false);
         }
+        // rubriques déjà utilisées (pour réécrire exactement le même nom)
+        List<String> cats = s.categories();
+        if (!cats.isEmpty())
+            g.drawString(font, font.plainSubstrByWidth("Rubriques : " + String.join(", ", cats), LIST_W), left + LIST_X, top + 216, DIM, false);
         // objet qui sera ajouté
         int px = left + 128, py = top + 177;
         g.fill(px, py, px + 18, py + 18, PANEL);

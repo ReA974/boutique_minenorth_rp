@@ -177,6 +177,7 @@ public class AdminEditPacket {
                 ItemStack item = p.getInventory().getItem(slot);
                 if (item.isEmpty()) return "Cet emplacement est vide : choisissez un objet de votre inventaire.";
                 ShopEntry e = s.addEntry(item, m.qty, m.price);
+                e.category = ShopEntry.clean(m.text);   // text = rubrique
                 d.changed();
                 return "Ajouté : " + m.qty + "x " + e.item.getHoverName().getString() + " à " + Money.format(m.price) + ".";
             }
@@ -187,6 +188,7 @@ public class AdminEditPacket {
                 if (m.qty < 1 || m.qty > MAX_QTY) return "Quantité invalide (1 à " + MAX_QTY + ").";
                 e.price = m.price;
                 e.quantity = m.qty;
+                e.category = ShopEntry.clean(m.text);   // text = rubrique (vide = sans rubrique)
                 d.changed();
                 return "Article modifié : " + m.qty + "x à " + Money.format(m.price) + ".";
             }

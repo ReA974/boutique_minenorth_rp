@@ -23,6 +23,7 @@ en **vente** ou en **rachat**, assignables à **n'importe quelle entité**. Paie
 | Ajouter un article | **Choisir dans l'inventaire** : votre inventaire s'affiche, cliquez l'objet (par défaut : l'objet en main). NBT conservé (enchantements, nom, données de mods). La quantité est préremplie avec la taille du tas. Mettre le prix du lot → **Ajouter** |
 | Modifier un article | Cliquer la ligne → changer prix/quantité → **Appliquer**. **Monter** = réordonner, **Retirer** = supprimer |
 | Licence requise | Bouton **Licence requise : …** : chaque clic passe à la licence suivante (liste lue dans la config de `minenorth_permis`), **Aucune** = retirer. Voir ci-dessous |
+| Rubrique d'un article | Champ **Rubrique** à côté de l'objet, lors de **Ajouter** ou **Appliquer** (vide = sans rubrique). Dans `shops.json` : `"category": "Armes"` sur l'article. Les joueurs voient des onglets (Tous, une par rubrique, Autres) |
 | Tester | **Aperçu** ouvre la boutique comme un joueur |
 
 ### Assigner une boutique à une entité

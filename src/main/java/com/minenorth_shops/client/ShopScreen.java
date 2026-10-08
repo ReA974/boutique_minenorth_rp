@@ -42,6 +42,11 @@ public class ShopScreen extends Screen {
     private int offset;
     private int left, top;
     private boolean silent;
+    /** Rubrique affichée : null = tout, "" = articles sans rubrique. */
+    private String cat;
+    private int tabOffset;
+    /** Décalage vers le bas quand la barre de rubriques est affichée. */
+    private int dy;
 
     public ShopScreen(ShopStatePacket st) {
         super(Component.literal(st.shop.name));
@@ -76,6 +81,40 @@ public class ShopScreen extends Screen {
 
     private Shop shop() {
         return st.shop;
+    }
+
+    private boolean hasCategories() {
+        return !shop().categories().isEmpty();
+    }
+
+    /** Articles de la rubrique choisie (tous s'il n'y a pas de rubrique). */
+    private List<ShopEntry> visible() {
+        if (cat == null || !hasCategories()) return shop().entries;
+        List<ShopEntry> out = new java.util.ArrayList<>();
+        for (ShopEntry e : shop().entries) if (e.category.equals(cat)) out.add(e);
+        return out;
+    }
+
+    /** Onglets : Tous, chaque rubrique, puis « Autres » s'il reste des articles sans rubrique. */
+    private List<String> tabs() {
+        List<String> t = new java.util.ArrayList<>();
+        t.add(null);
+        t.addAll(shop().categories());
+        for (ShopEntry e : shop().entries) if (e.category.isEmpty()) { t.add(""); break; }
+        return t;
+    }
+
+    private static String tabLabel(String c) {
+        return c == null ? "Tous" : c.isEmpty() ? "Autres" : c;
+    }
+
+    private void chooseCat(String c) {
+        cat = c;
+        offset = 0;
+        lots = 1;
+        List<ShopEntry> v = visible();
+        selected = v.isEmpty() ? -1 : v.get(0).id;
+        rebuildWidgets();
     }
 
     @Nullable
@@ -129,38 +168,73 @@ public class ShopScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
         Shop shop = shop();
+        if (cat != null && !tabs().contains(cat)) cat = null;   // la rubrique n'existe plus
+        dy = hasCategories() ? 16 : 0;
+        left = (width - W) / 2;
+        top = (height - H - dy) / 2;
+        List<ShopEntry> vis = visible();
         ShopEntry e = selectedEntry();
         boolean sel = e != null && st.licenceOk;   // sans la licence : consultation seulement
         long total = total();
 
         btn(W - 80, 10, 66, 16, "Quitter", ShopButton.GHOST, this::onClose);
 
-        int maxOffset = Math.max(0, shop.entries.size() - ROWS);
-        btn(LIST_X + LIST_W + 2, LIST_Y, 14, ROWS * ROW_H / 2 - 1, "^", ShopButton.DARK,
-                () -> offset = Math.max(0, offset - 1)).enabled(shop.entries.size() > ROWS);
-        btn(LIST_X + LIST_W + 2, LIST_Y + ROWS * ROW_H / 2 + 1, 14, ROWS * ROW_H / 2 - 1, "v", ShopButton.DARK,
-                () -> offset = Math.min(maxOffset, offset + 1)).enabled(shop.entries.size() > ROWS);
+        if (dy > 0) initTabs();
 
-        btn(LIST_X, 166, 18, 18, "-", ShopButton.DARK, () -> setLots(lots - 1)).enabled(sel && lots > 1);
-        btn(LIST_X + 60, 166, 18, 18, "+", ShopButton.DARK, () -> setLots(lots + 1)).enabled(sel && lots < st.maxLots);
-        btn(LIST_X + 82, 166, 34, 18, "Max", ShopButton.DARK, () -> setLots(maxLots())).enabled(sel);
+        int maxOffset = Math.max(0, vis.size() - ROWS);
+        btn(LIST_X + LIST_W + 2, LIST_Y + dy, 14, ROWS * ROW_H / 2 - 1, "^", ShopButton.DARK,
+                () -> offset = Math.max(0, offset - 1)).enabled(vis.size() > ROWS);
+        btn(LIST_X + LIST_W + 2, LIST_Y + dy + ROWS * ROW_H / 2 + 1, 14, ROWS * ROW_H / 2 - 1, "v", ShopButton.DARK,
+                () -> offset = Math.min(maxOffset, offset + 1)).enabled(vis.size() > ROWS);
+
+        btn(LIST_X, 166 + dy, 18, 18, "-", ShopButton.DARK, () -> setLots(lots - 1)).enabled(sel && lots > 1);
+        btn(LIST_X + 60, 166 + dy, 18, 18, "+", ShopButton.DARK, () -> setLots(lots + 1)).enabled(sel && lots < st.maxLots);
+        btn(LIST_X + 82, 166 + dy, 34, 18, "Max", ShopButton.DARK, () -> setLots(maxLots())).enabled(sel);
 
         if (shop.mode == ShopMode.SELL) {
             boolean cashOk = sel && shop.allowCash && st.cash >= total;
             boolean cardOk = sel && shop.allowCard && st.cardIssue.isEmpty() && st.balance >= total;
-            btn(LIST_X, 192, 96, 24, shop.allowCash ? "Payer en espèces" : "Espèces refusées", CYAN,
+            btn(LIST_X, 192 + dy, 96, 24, shop.allowCash ? "Payer en espèces" : "Espèces refusées", CYAN,
                     () -> trade(Method.CASH)).enabled(cashOk);
-            btn(LIST_X + 100, 192, 96, 24, shop.allowCard ? "Payer par carte" : "Carte refusée", ShopButton.PINK,
+            btn(LIST_X + 100, 192 + dy, 96, 24, shop.allowCard ? "Payer par carte" : "Carte refusée", ShopButton.PINK,
                     () -> trade(Method.CARD)).enabled(cardOk);
         } else {
             boolean enough = sel && have(e) >= e.quantity * lots;
-            btn(LIST_X, 192, 96, 24, shop.allowCash ? "Vendre (espèces)" : "Espèces refusées", ShopButton.GREEN,
+            btn(LIST_X, 192 + dy, 96, 24, shop.allowCash ? "Vendre (espèces)" : "Espèces refusées", ShopButton.GREEN,
                     () -> trade(Method.CASH)).enabled(enough && shop.allowCash);
-            btn(LIST_X + 100, 192, 96, 24, shop.allowCard ? "Vendre (compte)" : "Virement refusé", ShopButton.PINK,
+            btn(LIST_X + 100, 192 + dy, 96, 24, shop.allowCard ? "Vendre (compte)" : "Virement refusé", ShopButton.PINK,
                     () -> trade(Method.CARD)).enabled(enough && shop.allowCard && st.hasAccount);
+        }
+    }
+
+    /** Barre de rubriques sous l'en-tête, avec flèches si elles ne tiennent pas toutes. */
+    private void initTabs() {
+        List<String> tabs = tabs();
+        int x0 = LIST_X, x1 = LIST_X + LIST_W + 16, y = 38;
+        int[] w = new int[tabs.size()];
+        int total = 0;
+        for (int i = 0; i < w.length; i++) {
+            w[i] = Math.max(26, Math.min(70, font.width(tabLabel(tabs.get(i))) + 10));
+            total += w[i] + 2;
+        }
+        boolean arrows = total > x1 - x0;
+        int from = x0 + (arrows ? 14 : 0), to = x1 - (arrows ? 14 : 0);
+        tabOffset = Math.max(0, Math.min(tabOffset, tabs.size() - 1));
+        int x = from, last = tabOffset;
+        for (int i = tabOffset; i < tabs.size(); i++) {
+            if (x + w[i] > to && i > tabOffset) break;
+            String c = tabs.get(i);
+            btn(x, y, Math.min(w[i], to - x), 14, font.plainSubstrByWidth(tabLabel(c), w[i] - 6),
+                    java.util.Objects.equals(c, cat) ? CYAN : ShopButton.DARK, () -> chooseCat(c));
+            x += w[i] + 2;
+            last = i;
+        }
+        if (arrows) {
+            final int lastShown = last;
+            btn(x0, y, 12, 14, "<", ShopButton.GHOST, () -> { tabOffset = Math.max(0, tabOffset - 1); rebuildWidgets(); }).enabled(tabOffset > 0);
+            btn(x1 - 12, y, 12, 14, ">", ShopButton.GHOST, () -> { tabOffset = Math.min(tabs.size() - 1, tabOffset + 1); rebuildWidgets(); })
+                    .enabled(lastShown < tabs.size() - 1);
         }
     }
 
@@ -177,7 +251,7 @@ public class ShopScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double delta) {
-        int max = Math.max(0, shop().entries.size() - ROWS);
+        int max = Math.max(0, visible().size() - ROWS);
         offset = Math.max(0, Math.min(max, offset - (int) Math.signum(delta)));
         return true;
     }
@@ -185,10 +259,10 @@ public class ShopScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (super.mouseClicked(mx, my, button)) return true;
-        List<ShopEntry> list = shop().entries;
+        List<ShopEntry> list = visible();
         for (int i = 0; i < ROWS; i++) {
             int idx = offset + i;
-            int y = top + LIST_Y + i * ROW_H;
+            int y = top + LIST_Y + dy + i * ROW_H;
             if (idx < list.size() && mx >= left + LIST_X && mx < left + LIST_X + LIST_W && my >= y && my < y + ROW_H) {
                 int id = list.get(idx).id;
                 if (id != selected) {
@@ -226,8 +300,8 @@ public class ShopScreen extends Screen {
         renderBackground(g);
         Shop shop = shop();
         boolean buy = shop.mode == ShopMode.BUY;
-        g.fill(left - 3, top - 3, left + W + 3, top + H + 3, 0xFF0E0E10);
-        g.fill(left, top, left + W, top + H, BLUE);
+        g.fill(left - 3, top - 3, left + W + 3, top + H + dy + 3, 0xFF0E0E10);
+        g.fill(left, top, left + W, top + H + dy, BLUE);
 
         // en-tête
         RenderSystem.enableBlend();
@@ -259,15 +333,15 @@ public class ShopScreen extends Screen {
         }
 
         // liste des articles
-        g.fill(left + LIST_X, top + LIST_Y - 1, left + LIST_X + LIST_W, top + LIST_Y + ROWS * ROW_H + 1, PANEL);
-        List<ShopEntry> list = shop.entries;
+        g.fill(left + LIST_X, top + LIST_Y + dy - 1, left + LIST_X + LIST_W, top + LIST_Y + dy + ROWS * ROW_H + 1, PANEL);
+        List<ShopEntry> list = visible();
         offset = Math.max(0, Math.min(offset, Math.max(0, list.size() - ROWS)));
         ShopEntry hovered = null;
         for (int i = 0; i < ROWS; i++) {
             int idx = offset + i;
             if (idx >= list.size()) break;
             ShopEntry it = list.get(idx);
-            int x = left + LIST_X, y = top + LIST_Y + i * ROW_H;
+            int x = left + LIST_X, y = top + LIST_Y + dy + i * ROW_H;
             boolean inRow = mx >= x && mx < x + LIST_W && my >= y && my < y + ROW_H;
             if (it.id == selected) g.fill(x, y, x + LIST_W, y + ROW_H, CYAN);
             else if (inRow) g.fill(x, y, x + LIST_W, y + ROW_H, 0xFF2E2480);
@@ -282,14 +356,14 @@ public class ShopScreen extends Screen {
             String sub = buy ? "Vous en avez : " + have(it) : it.quantity > 1 ? "Lot de " + it.quantity : "À l'unité";
             g.drawString(font, sub, x + 22, y + 11, it.id == selected ? 0xFFE8F4FF : DIM, false);
         }
-        if (list.isEmpty()) g.drawString(font, "Cette boutique est vide.", left + LIST_X + 6, top + LIST_Y + 6, TEXT, false);
+        if (list.isEmpty()) g.drawString(font, shop.entries.isEmpty() ? "Cette boutique est vide." : "Aucun article dans cette rubrique.", left + LIST_X + 6, top + LIST_Y + dy + 6, TEXT, false);
 
         // quantité et total
         if (e != null) {
             String q = "x" + lots;
-            g.drawCenteredString(font, q, left + LIST_X + 39, top + 171, 0xFFFFFFFF);
-            g.drawString(font, buy ? "Vous recevez" : "Total", left + LIST_X + 122, top + 163, CYAN, false);
-            drawScaled(g, bold(Money.format(total())), left + LIST_X + 122, top + 174, 1.0f, 74, 0xFFFFFFFF);
+            g.drawCenteredString(font, q, left + LIST_X + 39, top + 171 + dy, 0xFFFFFFFF);
+            g.drawString(font, buy ? "Vous recevez" : "Total", left + LIST_X + 122, top + 163 + dy, CYAN, false);
+            drawScaled(g, bold(Money.format(total())), left + LIST_X + 122, top + 174 + dy, 1.0f, 74, 0xFFFFFFFF);
         }
 
         if (message != null && !message.isEmpty()) wrap(g, message, left + 16, top + 162, 86, 5, WARN);

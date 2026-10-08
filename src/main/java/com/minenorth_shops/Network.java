@@ -21,7 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "3";   // 3 : boutiques réservées à la police
+    private static final String PROTOCOL = "4";   // 4 : rubriques des articles (3 : boutiques réservées à la police)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MineNorthShops.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 

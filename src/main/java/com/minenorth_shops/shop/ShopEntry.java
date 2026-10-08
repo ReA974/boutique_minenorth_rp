@@ -16,6 +16,9 @@ public class ShopEntry {
     public ItemStack item;
     public int quantity;
     public long price;
+    /** Rubrique de la boutique (« Armes », « Boissons »...) ; vide = sans rubrique. */
+    public String category = "";
+    public static final int MAX_CATEGORY = 20;
 
     public ShopEntry(int id, ItemStack item, int quantity, long price) {
         this.id = id;
@@ -37,11 +40,14 @@ public class ShopEntry {
         t.put("Item", item.save(new CompoundTag()));
         t.putInt("Qty", quantity);
         t.putLong("Price", price);
+        if (!category.isEmpty()) t.putString("Category", category);
         return t;
     }
 
     public static ShopEntry load(CompoundTag t) {
-        return new ShopEntry(t.getInt("Id"), ItemStack.of(t.getCompound("Item")), Math.max(1, t.getInt("Qty")), t.getLong("Price"));
+        ShopEntry e = new ShopEntry(t.getInt("Id"), ItemStack.of(t.getCompound("Item")), Math.max(1, t.getInt("Qty")), t.getLong("Price"));
+        e.category = t.getString("Category");
+        return e;
     }
 
     /** Format JSON : {"id":1,"item":"minecraft:iron_sword","nbt":"{...}","quantity":1,"price":1500} (prix en centimes). */
@@ -53,6 +59,7 @@ public class ShopEntry {
         if (item.getTag() != null && !item.getTag().isEmpty()) o.addProperty("nbt", item.getTag().toString());
         o.addProperty("quantity", quantity);
         o.addProperty("price", price);
+        if (!category.isEmpty()) o.addProperty("category", category);
         return o;
     }
 
@@ -69,7 +76,15 @@ public class ShopEntry {
         }
         int qty = o.has("quantity") ? Math.max(1, o.get("quantity").getAsInt()) : 1;
         long price = o.has("price") ? Math.max(0, o.get("price").getAsLong()) : 0;
-        return new ShopEntry(o.has("id") ? o.get("id").getAsInt() : 0, st, qty, price);
+        ShopEntry e = new ShopEntry(o.has("id") ? o.get("id").getAsInt() : 0, st, qty, price);
+        if (o.has("category")) e.category = clean(o.get("category").getAsString());
+        return e;
+    }
+
+    /** Nom de rubrique propre : sans codes de formatage ni caractères de contrôle, 20 caractères au plus. */
+    public static String clean(String s) {
+        s = s == null ? "" : s.replaceAll("[\\p{Cntrl}§]", "").trim();
+        return s.length() > MAX_CATEGORY ? s.substring(0, MAX_CATEGORY).trim() : s;
     }
 
     public void write(FriendlyByteBuf b) {
@@ -77,9 +92,12 @@ public class ShopEntry {
         b.writeItem(item);
         b.writeVarInt(quantity);
         b.writeVarLong(price);
+        b.writeUtf(category, 32);
     }
 
     public static ShopEntry read(FriendlyByteBuf b) {
-        return new ShopEntry(b.readVarInt(), b.readItem(), b.readVarInt(), b.readVarLong());
+        ShopEntry e = new ShopEntry(b.readVarInt(), b.readItem(), b.readVarInt(), b.readVarLong());
+        e.category = b.readUtf(32);
+        return e;
     }
 }

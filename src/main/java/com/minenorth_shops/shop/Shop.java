@@ -40,6 +40,13 @@ public class Shop {
         return e;
     }
 
+    /** Rubriques utilisées par les articles, dans l'ordre d'apparition. */
+    public List<String> categories() {
+        List<String> out = new ArrayList<>();
+        for (ShopEntry e : entries) if (!e.category.isEmpty() && !out.contains(e.category)) out.add(e.category);
+        return out;
+    }
+
     public boolean policeOnly() {
         return policeGrade >= 0;
     }
@@ -125,7 +132,9 @@ public class Shop {
                     continue;
                 }
                 if (e.id <= 0 || s.entry(e.id) != null) {   // id absent ou en double -> on en attribue un nouveau
+                    String cat = e.category;
                     e = new ShopEntry(s.nextEntryId, e.item, e.quantity, e.price);
+                    e.category = cat;
                 }
                 s.entries.add(e);
                 s.nextEntryId = Math.max(s.nextEntryId, e.id + 1);
