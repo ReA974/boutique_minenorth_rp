@@ -93,6 +93,8 @@ public class ShopData extends SavedData {
     // ---------------------------------------------------------------- JSON
 
     /** Au premier accès : charge le JSON (ou le crée depuis les données existantes). Ensuite : recharge s'il a été modifié. */
+    private long lastJsonCheck;
+
     private void syncJson() {
         Path f = file();
         if (!jsonInit) {
@@ -104,6 +106,10 @@ public class ShopData extends SavedData {
             writeJson();   // première fois : exporte les boutiques existantes
             return;
         }
+        // get() est appelé à chaque tick : on ne regarde la date du fichier qu'une fois toutes les 2 s.
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastJsonCheck < 2000) return;
+        lastJsonCheck = nowMs;
         try {
             if (Files.exists(f) && Files.getLastModifiedTime(f).toMillis() != jsonStamp) {
                 if (readJson(f)) {
