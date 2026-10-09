@@ -123,3 +123,9 @@ Une boutique peut être réservée aux policiers enregistrés (`/police grade`),
   Les ops peuvent l'ouvrir pour la consulter, mais pas y acheter sans grade.
 - Cumulable avec la licence et le choix espèces / carte.
 - Par sécurité, une boutique police est **bloquée** si le mod Police est absent.
+
+## Licence
+
+**Tous droits réservés - MineNorthRP.** Réutilisation, copie, modification, décompilation / ingénierie
+inverse (y compris par outils d'intelligence artificielle) et utilisation pour entraîner une IA sont
+**interdites** sans autorisation écrite. Voir [LICENSE](LICENSE).
