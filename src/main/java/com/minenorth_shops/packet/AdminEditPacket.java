@@ -4,6 +4,7 @@ import com.minenorth_eurobank.Money;
 import com.minenorth_shops.Network;
 import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.PoliceCompat;
+import com.minenorth_shops.PompierCompat;
 import com.minenorth_shops.items.ShopLinkerItem;
 import com.minenorth_shops.shop.Shop;
 import com.minenorth_shops.shop.ShopData;
@@ -22,7 +23,8 @@ public class AdminEditPacket {
         OPEN, CLOSE, CREATE, DELETE, RENAME, TOGGLE_MODE, TOGGLE_CASH, TOGGLE_CARD,
         ADD_ENTRY /* entryId = slot */, UPDATE_ENTRY, REMOVE_ENTRY, MOVE_UP, LINKER, PREVIEW,
         SET_LICENCE /* text = id de licence, vide = aucune */,
-        CYCLE_POLICE /* tout le monde -> police (tous grades) -> officier et + -> commissaire -> tout le monde */
+        SET_ACCESS /* text = tous | police:2 (tous grades) | police:1 (officier et +) | police:0 (commissaire) | pompier */,
+        SET_ILLEGAL /* text = "1" illégale, "0" légale */
     }
 
     public static final int MAX_QTY = 4096;
@@ -157,12 +159,34 @@ public class AdminEditPacket {
                 d.changed();
                 return "Licence exigée : " + PermisCompat.name(lic) + ".";
             }
-            case CYCLE_POLICE -> {
-                s.policeGrade = s.policeGrade < 0 ? 2 : s.policeGrade - 1;
+            case SET_ACCESS -> {
+                String a = m.text.trim().toLowerCase(java.util.Locale.ROOT);
+                s.pompier = false;
+                s.policeGrade = -1;
+                if (a.equals("pompier")) {
+                    s.pompier = true;
+                } else if (a.startsWith("police:")) {
+                    try {
+                        s.policeGrade = Math.max(0, Math.min(2, Integer.parseInt(a.substring(7))));
+                    } catch (NumberFormatException ex) {
+                        s.policeGrade = -1;
+                    }
+                }
                 d.changed();
+                if (s.pompier) {
+                    return "Réservée aux pompiers / secours."
+                            + (PompierCompat.available() ? "" : " Attention : mod Secours absent, boutique bloquée.");
+                }
                 if (!s.policeOnly()) return "Boutique ouverte à tout le monde.";
                 return "Réservée : " + PoliceCompat.label(s.policeGrade) + "."
                         + (PoliceCompat.available() ? "" : " Attention : mod Police absent, boutique bloquée.");
+            }
+            case SET_ILLEGAL -> {
+                s.illegal = m.text.trim().equals("1");
+                d.changed();
+                return s.illegal
+                        ? "Boutique illégale : assignez-lui 2 entités (outil de liaison), une seule sera présente à la fois."
+                        : "Boutique légale : toutes ses entités redeviennent présentes.";
             }
             case ADD_ENTRY -> {
                 if (s.entries.size() >= Shop.MAX_ENTRIES) return "Maximum " + Shop.MAX_ENTRIES + " articles par boutique.";

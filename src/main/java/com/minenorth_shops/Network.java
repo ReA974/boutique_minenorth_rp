@@ -21,7 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class Network {
-    private static final String PROTOCOL = "4";   // 4 : rubriques des articles (3 : boutiques réservées à la police)
+    private static final String PROTOCOL = "5";   // 5 : boutiques pompiers + illégales (4 : rubriques des articles, 3 : boutiques réservées à la police)
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MineNorthShops.MODID, "main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -45,7 +45,8 @@ public final class Network {
 
     public static void openShop(ServerPlayer p, Shop shop, int entityId) {
         // Boutique police : les autres joueurs ne peuvent même pas l'ouvrir (les ops peuvent la consulter, pas y acheter).
-        String police = PoliceCompat.denial(p, shop);
+        String police = PompierCompat.denial(p, shop);
+        if (police == null) police = PoliceCompat.denial(p, shop);
         if (police != null && !p.hasPermissions(2)) {
             p.displayClientMessage(net.minecraft.network.chat.Component.literal("§c" + police), true);
             return;

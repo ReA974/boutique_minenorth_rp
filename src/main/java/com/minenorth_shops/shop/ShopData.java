@@ -180,7 +180,7 @@ public class ShopData extends SavedData {
             Files.createDirectories(f.getParent());
             JsonObject root = new JsonObject();
             root.addProperty("_info", "Prix en centimes (1500 = 15,00 EUR). mode: SELL (la boutique vend) ou BUY (la boutique rachete). "
-                    + "policeGrade: -1 = tout le monde, 0 = commissaire, 1 = officier+, 2 = tout policier. Rechargé automatiquement. "
+                    + "policeGrade: -1 = tout le monde, 0 = commissaire, 1 = officier+, 2 = tout policier. pompier: reservee aux pompiers/secours. illegal: deux entites assignees, une seule presente a la fois (illegalMinutes 0 et illegalRadius -1 = valeurs de la config). Rechargé automatiquement. "
                     + "revision: écrite par le mod, ne pas la modifier (un fichier de revision plus ancienne que le monde est mis de côté, pas appliqué).");
             root.addProperty("nextId", nextId);
             root.addProperty("revision", revision);

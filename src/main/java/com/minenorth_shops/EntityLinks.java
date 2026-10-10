@@ -39,6 +39,7 @@ public final class EntityLinks {
     public static void link(Entity e, int shopId) {
         CompoundTag t = e.getPersistentData();
         t.putInt(KEY, shopId);
+        IllegalRotation.onLinked(e, shopId);
         if (ShopConfig.PROTECT_ENTITIES.get() && !e.isInvulnerable()) {
             e.setInvulnerable(true);
             t.putBoolean(KEY_PROTECTED, true);
@@ -55,6 +56,7 @@ public final class EntityLinks {
     public static boolean unlink(Entity e) {
         CompoundTag t = e.getPersistentData();
         if (!t.contains(KEY)) return false;
+        IllegalRotation.onUnlinked(e, t.getInt(KEY));
         t.remove(KEY);
         if (t.getBoolean(KEY_PROTECTED)) e.setInvulnerable(false);
         if (t.getBoolean(KEY_FROZEN) && e instanceof Mob m) m.setNoAi(false);

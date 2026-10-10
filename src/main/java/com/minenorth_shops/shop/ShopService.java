@@ -5,6 +5,7 @@ import fr.minenorth.api.MineNorth;
 import fr.minenorth.api.PayResult;
 import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.PoliceCompat;
+import com.minenorth_shops.PompierCompat;
 import com.minenorth_shops.ShopConfig;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -70,8 +71,9 @@ public final class ShopService {
      * @return message à afficher au joueur
      */
     public static String transact(ServerPlayer p, Shop shop, ShopEntry e, int lots, Method method) {
-        String police = PoliceCompat.denial(p, shop);
-        if (police != null) return police;
+        String restricted = PompierCompat.denial(p, shop);
+        if (restricted == null) restricted = PoliceCompat.denial(p, shop);
+        if (restricted != null) return restricted;
         String denied = PermisCompat.denial(p, shop.licence);
         if (denied != null) return denied;
         if (lots == -1) lots = maxLots(p, shop, e);

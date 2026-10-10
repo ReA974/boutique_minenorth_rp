@@ -62,6 +62,8 @@ public class ShopAdminScreen extends Screen {
     private boolean picking;
     private int pickedSlot = -1;   // -1 = objet en main
     private int left, top;
+    /** Liste déroulante actuellement ouverte (dessinée au-dessus de tout, clics interceptés). */
+    private ShopDropdown openDropdown;
 
     public ShopAdminScreen(AdminSyncPacket m) {
         super(Component.literal("Boutiques"));
@@ -116,12 +118,19 @@ public class ShopAdminScreen extends Screen {
         return id;
     }
 
-    /** Licence suivante dans la liste (aucune -> 1re -> 2e ... -> dernière -> aucune). */
-    private String nextLicence(String current) {
-        if (licences.isEmpty()) return "";
-        int i = -1;
-        for (int k = 0; k < licences.size(); k++) if (licences.get(k).id().equals(current)) i = k;
-        return i + 1 >= licences.size() ? "" : licences.get(i + 1).id();
+    private ShopDropdown dropdown(int x, int y, int w, String title, List<String> options, int selected, int color,
+                                  java.util.function.IntConsumer onSelect) {
+        return addRenderableWidget(new ShopDropdown(left + x, top + y, w, 18, title, options, selected, color, onSelect,
+                d -> openDropdown = d));
+    }
+
+    private static final String[] ACCESS_LABELS = {"Tous", "Police", "Police off.+", "Police comm.", "Pompiers"};
+    private static final String[] ACCESS_CODES = {"tous", "police:2", "police:1", "police:0", "pompier"};
+
+    private static int accessIndex(Shop s) {
+        if (s.pompier) return 4;
+        if (!s.policeOnly()) return 0;
+        return 3 - Math.max(0, Math.min(2, s.policeGrade));   // grade 2 (tout policier) -> 1, 1 -> 2, 0 -> 3
     }
 
     private void startEdit(int id) {
@@ -209,6 +218,7 @@ public class ShopAdminScreen extends Screen {
         left = (width - W) / 2;
         top = (height - H) / 2;
         createBox = renameBox = priceBox = qtyBox = catBox = null;
+        openDropdown = null;
         if (shop(editing) == null) picking = false;
         if (picking) initPicker();
         else if (shop(editing) != null) initEdit(shop(editing));
@@ -270,20 +280,26 @@ public class ShopAdminScreen extends Screen {
         btn(219, 58, 85, 18, (s.mode == ShopMode.SELL ? "Carte : " : "Compte : ") + (s.allowCard ? "oui" : "non"),
                 s.allowCard ? ShopButton.PINK : ShopButton.DARK, () -> send(Op.TOGGLE_CARD, s.id));
 
-        // licence exigée (mod minenorth_permis) : clic = licence suivante, « Aucune » = retirer
-        String licLabel;
-        if (s.requiresLicence()) licLabel = "Licence requise : " + licenceName(s.licence);
-        else if (!permis) licLabel = "Licence : mod permis absent";
-        else licLabel = "Licence requise : aucune";
-        btn(16, 78, 150, 18, font.plainSubstrByWidth(licLabel, 144), s.requiresLicence() ? ShopButton.GREEN : ShopButton.DARK,
-                () -> send(Op.SET_LICENCE, s.id, 0, nextLicence(s.licence), 0, 0))
-                .enabled(permis && !licences.isEmpty());
-        btn(170, 78, 50, 18, "Aucune", ShopButton.GHOST, () -> send(Op.SET_LICENCE, s.id, 0, "", 0, 0))
-                .enabled(s.requiresLicence());
-        // réservée à la police (mod minenorthpolice) : clic = non -> tout policier (oui) -> officier et + -> commissaire -> non
-        String[] police = {"Police : comm.", "Police : off.+", "Police : oui"};
-        btn(224, 78, 80, 18, s.policeOnly() ? police[Math.max(0, Math.min(2, s.policeGrade))] : "Police : non",
-                s.policeOnly() ? ShopButton.PINK : ShopButton.DARK, () -> send(Op.CYCLE_POLICE, s.id));
+        // conditions de la boutique, en listes déroulantes : licence (mod permis), accès réservé (police / pompiers), légalité
+        List<String> licNames = new java.util.ArrayList<>();
+        licNames.add("Aucune");
+        int licSel = 0;
+        for (int i = 0; i < licences.size(); i++) {
+            licNames.add(licences.get(i).name());
+            if (licences.get(i).id().equals(s.licence)) licSel = i + 1;
+        }
+        if (s.requiresLicence() && licSel == 0) {   // licence que le serveur ne connaît plus : on l'affiche quand même
+            licNames.add(licenceName(s.licence));
+            licSel = licNames.size() - 1;
+        }
+        ShopDropdown licDrop = dropdown(16, 78, 88, "Licence", licNames, licSel, s.requiresLicence() ? ShopButton.GREEN : ShopButton.DARK,
+                i -> send(Op.SET_LICENCE, s.id, 0, i == 0 || i > licences.size() ? "" : licences.get(i - 1).id(), 0, 0));
+        licDrop.active = permis && !licences.isEmpty();
+        dropdown(108, 78, 118, "Accès", List.of(ACCESS_LABELS), accessIndex(s),
+                s.pompier ? ShopButton.GREEN : s.policeOnly() ? ShopButton.PINK : ShopButton.DARK,
+                i -> send(Op.SET_ACCESS, s.id, 0, ACCESS_CODES[i], 0, 0));
+        dropdown(230, 78, 74, "Statut", List.of("Légale", "Illégale"), s.illegal ? 1 : 0, s.illegal ? ShopButton.PINK : ShopButton.DARK,
+                i -> send(Op.SET_ILLEGAL, s.id, 0, i == 1 ? "1" : "0", 0, 0));
 
         int maxOffset = Math.max(0, s.entries.size() - E_ROWS);
         btn(LIST_X + LIST_W + 2, E_Y, 14, E_ROWS * E_ROW_H / 2 - 1, "^", ShopButton.DARK, () -> offset = Math.max(0, offset - 1))
@@ -407,6 +423,10 @@ public class ShopAdminScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double delta) {
+        if (openDropdown != null) {
+            openDropdown.scrollList(delta);
+            return true;
+        }
         Shop s = shop(editing);
         int size = s != null ? s.entries.size() : shops.size();
         int rows = s != null ? E_ROWS : L_ROWS;
@@ -416,6 +436,11 @@ public class ShopAdminScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if (openDropdown != null) {   // liste ouverte : elle reçoit le clic ; un clic ailleurs la referme sans rien déclencher d'autre
+            ShopDropdown d = openDropdown;
+            if (!d.clickList(mx, my)) d.close();
+            return true;
+        }
         if (super.mouseClicked(mx, my, button)) return true;
         if (picking) {
             int slot = slotAt(mx, my);
@@ -490,7 +515,8 @@ public class ShopAdminScreen extends Screen {
             g.drawString(font, font.plainSubstrByWidth(message, W - 32), left + 16, top + 224, WARN, false);
         }
         super.render(g, mx, my, pt);
-        if (hovered != null) g.renderTooltip(font, hovered.item, mx, my);
+        if (openDropdown != null) openDropdown.renderList(g, mx, my);
+        if (hovered != null && openDropdown == null) g.renderTooltip(font, hovered.item, mx, my);
         if (pickHover != null) g.renderTooltip(font, pickHover, mx, my);
         else if (!picking && s != null && mx >= left + 128 && mx < left + 146 && my >= top + 177 && my < top + 195
                 && !pickedStack().isEmpty()) g.renderTooltip(font, pickedStack(), mx, my);
@@ -510,7 +536,7 @@ public class ShopAdminScreen extends Screen {
             boolean sel = sh.id == selectedShop;
             if (sel) g.fill(x, y, x + LIST_W, y + L_ROW_H, CYAN);
             else if (mx >= x && mx < x + LIST_W && my >= y && my < y + L_ROW_H) g.fill(x, y, x + LIST_W, y + L_ROW_H, HOVER);
-            String right = (sh.policeOnly() ? "Police · " : "") + (sh.requiresLicence() ? "Licence · " : "") + sh.mode.label + " · " + sh.entries.size() + " art.";
+            String right = (sh.illegal ? "Illégale · " : "") + (sh.accessLabel().isEmpty() ? "" : sh.accessLabel() + " · ") + (sh.requiresLicence() ? "Licence · " : "") + sh.mode.label + " · " + sh.entries.size() + " art.";
             int rw = font.width(right);
             g.drawString(font, "#" + sh.id, x + 4, y + 4, sel ? 0xFFFFFFFF : DIM, false);
             g.drawString(font, font.plainSubstrByWidth(sh.name, LIST_W - rw - 40), x + 30, y + 4, 0xFFFFFFFF, false);

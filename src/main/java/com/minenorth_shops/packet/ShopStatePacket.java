@@ -5,6 +5,7 @@ import fr.minenorth.api.MineNorth;
 import fr.minenorth.api.PayResult;
 import com.minenorth_shops.PermisCompat;
 import com.minenorth_shops.PoliceCompat;
+import com.minenorth_shops.PompierCompat;
 import com.minenorth_shops.ShopConfig;
 import com.minenorth_shops.client.ClientHooks;
 import com.minenorth_shops.shop.Shop;
@@ -59,7 +60,8 @@ public class ShopStatePacket {
             if (open && !m.licenceOk && message.isEmpty()) message = PermisCompat.denial(p, shop.licence);
         }
         if (open && message.isEmpty()) {
-            String police = PoliceCompat.denial(p, shop);
+            String police = PompierCompat.denial(p, shop);
+            if (police == null) police = PoliceCompat.denial(p, shop);
             if (police != null) message = police;
         }
         m.message = message;

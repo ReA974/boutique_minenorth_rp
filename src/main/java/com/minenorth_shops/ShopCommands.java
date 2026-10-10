@@ -34,6 +34,9 @@ import java.util.Collection;
  * /shops linker <id>                   donne l'outil de liaison
  * /shops licence <id> <licence|aucune> licence (mod minenorth_permis) exigée pour commercer
  * /shops police <id> <tous|policier|officier|commissaire> boutique réservée à la police (grade minimum)
+ * /shops pompier <id> <on|off>         boutique réservée aux pompiers / secours
+ * /shops illegal <id> <on|off> [minutes] [distance]  boutique illégale : 2 entités, une seule présente à la fois
+ * /shops illegal <id> statut | basculer
  */
 public final class ShopCommands {
     private ShopCommands() {}
@@ -80,7 +83,95 @@ public final class ShopCommands {
                                 .then(Commands.argument("acces", StringArgumentType.word())
                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(
                                                 java.util.List.of("tous", "policier", "officier", "commissaire"), b))
-                                        .executes(ShopCommands::police)))));
+                                        .executes(ShopCommands::police))))
+                .then(Commands.literal("pompier")
+                        .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
+                                .then(Commands.argument("etat", StringArgumentType.word()).suggests(ON_OFF)
+                                        .executes(ShopCommands::pompier))))
+                .then(Commands.literal("illegal")
+                        .then(Commands.argument("id", IntegerArgumentType.integer(1)).suggests(SHOP_IDS)
+                                .then(Commands.literal("statut").executes(ShopCommands::illegalStatus))
+                                .then(Commands.literal("basculer").executes(ShopCommands::illegalSwap))
+                                .then(Commands.argument("etat", StringArgumentType.word()).suggests(ON_OFF)
+                                        .executes(c -> illegal(c, 0, -1, false))
+                                        .then(Commands.argument("minutes", IntegerArgumentType.integer(0, 10080))
+                                                .executes(c -> illegal(c, IntegerArgumentType.getInteger(c, "minutes"), -1, false))
+                                                .then(Commands.argument("distance", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg(-1, 256))
+                                                        .executes(c -> illegal(c, IntegerArgumentType.getInteger(c, "minutes"),
+                                                                com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(c, "distance"), true))))))));
+    }
+
+    private static final SuggestionProvider<CommandSourceStack> ON_OFF = (ctx, b) ->
+            SharedSuggestionProvider.suggest(java.util.List.of("on", "off"), b);
+
+    private static Boolean parseOnOff(String s) {
+        return switch (s.toLowerCase(java.util.Locale.ROOT)) {
+            case "on", "oui", "true", "1" -> Boolean.TRUE;
+            case "off", "non", "false", "0" -> Boolean.FALSE;
+            default -> null;
+        };
+    }
+
+    private static int pompier(CommandContext<CommandSourceStack> c) {
+        Shop s = shop(c);
+        Boolean on = parseOnOff(StringArgumentType.getString(c, "etat"));
+        if (s == null || on == null) {
+            c.getSource().sendFailure(Component.literal(s == null ? "Boutique introuvable." : "État : on ou off."));
+            return 0;
+        }
+        s.pompier = on;
+        if (on) s.policeGrade = -1;
+        ShopData.get(c.getSource().getServer()).changed();
+        c.getSource().sendSystemMessage(Component.literal(on
+                ? "« " + s.name + " » est réservée aux pompiers / secours." + (PompierCompat.available() ? "" : " (mod Secours absent : boutique bloquée)")
+                : "« " + s.name + " » n'est plus réservée aux pompiers."));
+        return 1;
+    }
+
+    /** minutes 0 = valeur de la config ; distance : seulement si donnée (-1 = valeur de la config, 0 = jamais repoussé). */
+    private static int illegal(CommandContext<CommandSourceStack> c, int minutes, double distance, boolean setDistance) {
+        Shop s = shop(c);
+        Boolean on = parseOnOff(StringArgumentType.getString(c, "etat"));
+        if (s == null || on == null) {
+            c.getSource().sendFailure(Component.literal(s == null ? "Boutique introuvable." : "État : on ou off."));
+            return 0;
+        }
+        s.illegal = on;
+        if (on) {
+            s.illegalMinutes = minutes;
+            if (setDistance) s.illegalRadius = distance;
+        }
+        ShopData.get(c.getSource().getServer()).changed();
+        c.getSource().sendSystemMessage(Component.literal(on
+                ? "« " + s.name + " » est illégale : une seule de ses entités est présente à la fois, changement toutes les "
+                + (s.illegalMinutes > 0 ? s.illegalMinutes : ShopConfig.ILLEGAL_MINUTES.get()) + " min, repoussé si un joueur est à moins de "
+                + (s.illegalRadius >= 0 ? s.illegalRadius : ShopConfig.ILLEGAL_RADIUS.get()) + " blocs."
+                : "« " + s.name + " » est légale : toutes ses entités reviennent."));
+        return 1;
+    }
+
+    private static int illegalStatus(CommandContext<CommandSourceStack> c) {
+        Shop s = shop(c);
+        if (s == null) {
+            c.getSource().sendFailure(Component.literal("Boutique introuvable."));
+            return 0;
+        }
+        c.getSource().sendSystemMessage(Component.literal("« " + s.name + " » : " + IllegalRotation.status(c.getSource().getServer(), s)));
+        return 1;
+    }
+
+    private static int illegalSwap(CommandContext<CommandSourceStack> c) {
+        Shop s = shop(c);
+        if (s == null) {
+            c.getSource().sendFailure(Component.literal("Boutique introuvable."));
+            return 0;
+        }
+        if (!IllegalRotation.forceSwap(c.getSource().getServer(), s)) {
+            c.getSource().sendFailure(Component.literal("Impossible : boutique non illégale, ou moins de 2 entités assignées."));
+            return 0;
+        }
+        c.getSource().sendSystemMessage(Component.literal("Changement d'emplacement fait."));
+        return 1;
     }
 
     private static Shop shop(CommandContext<CommandSourceStack> c) {
@@ -106,6 +197,8 @@ public final class ShopCommands {
             if (!s.allowCard) b.append(", sans carte");
             if (s.requiresLicence()) b.append(", licence : ").append(PermisCompat.name(s.licence));
             if (s.policeOnly()) b.append(", ").append(PoliceCompat.label(s.policeGrade));
+            if (s.pompier) b.append(", pompiers");
+            if (s.illegal) b.append(", ILLÉGALE");
         }
         String txt = b.toString();
         c.getSource().sendSystemMessage(Component.literal(txt));
@@ -202,6 +295,7 @@ public final class ShopCommands {
             return 0;
         }
         s.policeGrade = g;
+        if (g >= 0) s.pompier = false;
         ShopData.get(c.getSource().getServer()).changed();
         String txt = g < 0 ? "« " + s.name + " » est ouverte à tout le monde."
                 : "« " + s.name + " » est réservée : " + PoliceCompat.label(g) + "."

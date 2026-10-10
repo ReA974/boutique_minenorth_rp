@@ -22,7 +22,7 @@ en **vente** ou en **rachat**, assignables à **n'importe quelle entité**. Paie
 | Moyens de paiement | **Espèces : oui/non**, **Carte : oui/non** (en rachat : *Compte* = argent versé sur le compte) |
 | Ajouter un article | **Choisir dans l'inventaire** : votre inventaire s'affiche, cliquez l'objet (par défaut : l'objet en main). NBT conservé (enchantements, nom, données de mods). La quantité est préremplie avec la taille du tas. Mettre le prix du lot → **Ajouter** |
 | Modifier un article | Cliquer la ligne → changer prix/quantité → **Appliquer**. **Monter** = réordonner, **Retirer** = supprimer |
-| Licence requise | Bouton **Licence requise : …** : chaque clic passe à la licence suivante (liste lue dans la config de `minenorth_permis`), **Aucune** = retirer. Voir ci-dessous |
+| Conditions de la boutique | Trois **listes déroulantes** (un clic ouvre la liste, un clic choisit) : **Licence** (liste lue dans la config de `minenorth_permis`, *Aucune* = retirer), **Accès** (*Tous*, *Police*, *Police off.+*, *Police comm.*, *Pompiers*) et **Statut** (*Légale* / *Illégale*) |
 | Rubrique d'un article | Champ **Rubrique** à côté de l'objet, lors de **Ajouter** ou **Appliquer** (vide = sans rubrique). Dans `shops.json` : `"category": "Armes"` sur l'article. Les joueurs voient des onglets (Tous, une par rubrique, Autres) |
 | Tester | **Aperçu** ouvre la boutique comme un joueur |
 
@@ -53,12 +53,37 @@ grisés, la licence s'affiche en rouge dans l'en-tête, et le serveur refuse tou
 normalement. Par sécurité, une boutique qui exige une licence est **bloquée** si le mod permis est absent (on ne vend
 pas d'armes à tout le monde à cause d'un jar manquant).
 
+### Boutiques réservées aux pompiers
+
+Liste **Accès → Pompiers**, ou `/shops pompier <id> <on|off>`. Seuls les membres des pompiers / SAMU (mod Secours, via MineNorth API)
+peuvent ouvrir la boutique et y acheter ; les ops peuvent la consulter. Réservée **police** ou **pompiers**, pas les deux.
+Sans le mod Secours, la boutique est **bloquée** (même principe que la police). `restrictions.pompierServiceRequis = true` exige en plus
+d'être en service (tablette Secours).
+
+### Boutiques illégales (deux entités, une seule présente à la fois)
+
+Liste **Statut → Illégale**, ou `/shops illegal <id> on [minutes] [distance]`. Assignez ensuite **2 entités** à la boutique avec l'outil de
+liaison (une à chaque emplacement). Toutes les `intervalleMinutes` (15 par défaut), celle qui est visible **disparaît** et l'autre **apparaît** ;
+si un joueur est à moins de `distanceJoueurs` (10 blocs par défaut) de l'entité visible ou de l'emplacement suivant, le changement est
+repoussé jusqu'à ce qu'il parte.
+
+- L'entité cachée est retirée du monde (ses données complètes sont gardées dans `world/data/minenorth_shops_illegal.dat`) et recréée à son
+  emplacement quand son tour revient. Une entité dont le chunk n'est pas chargé est traitée dès que le chunk se charge ; l'échéance (horloge
+  réelle) survit aux redémarrages.
+- Redevenue légale (ou rotation coupée), la boutique retrouve toutes ses entités.
+- Avec une seule entité assignée, rien ne change (pas d'alternance).
+- `/shops illegal <id> statut` : emplacements, actif, minutes avant le prochain changement. `/shops illegal <id> basculer` : changement tout de suite.
+- Réglages par boutique : `minutes` (0 = config) et `distance` (-1 = config, 0 = jamais repoussé), aussi dans `shops.json`
+  (`illegalMinutes`, `illegalRadius`).
+
 ### Autres commandes
 
 - `/shops list` — liste des boutiques.
 - `/shops edit <id>` — ouvre l'édition.
 - `/shops licence <id> <licence|aucune>` — licence exigée pour commercer.
 - `/shops police <id> <tous|policier|officier|commissaire>` — boutique réservée à la police.
+- `/shops pompier <id> <on|off>` — boutique réservée aux pompiers / secours.
+- `/shops illegal <id> <on|off> [minutes] [distance]` | `statut` | `basculer` — boutique illégale (voir ci-dessus).
 - `/shops open <id> [joueurs]` — ouvre une boutique sans entité (blocs de commande, PNJ d'autres mods qui exécutent
   des commandes…).
 
@@ -82,6 +107,13 @@ solde suffisant. En rachat, les outils abîmés ne sont pas repris ; si l'articl
     distanceMax = 8.0        # distance max joueur ↔ vendeur
 [achats]
     lotsMax = 64             # lots max par transaction
+[restrictions]
+    pompierServiceRequis = false   # boutiques pompiers : exiger d'être en service
+[illegal]
+    actif = true             # false = plus aucune rotation
+    intervalleMinutes = 15   # minutes entre deux changements d'emplacement
+    distanceJoueurs = 10.0   # un joueur plus près repousse le changement (0 = jamais)
+    verificationSecondes = 1 # fréquence des contrôles
 ```
 
 Toutes les boutiques sont dans **`config/minenorth_shops/shops.json`** (un seul fichier, modifiable à la main).

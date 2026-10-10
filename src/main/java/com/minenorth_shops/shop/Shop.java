@@ -26,6 +26,14 @@ public class Shop {
     public String licence = "";
     /** Réservée à la police (mod minenorthpolice) : -1 = tout le monde, sinon grade minimum (0 = Commissaire, 1 = Officier, 2 = tout policier). */
     public int policeGrade = -1;
+    /** Réservée aux pompiers / secours (mod minenorthsecours). */
+    public boolean pompier;
+    /** Boutique illégale : deux entités (ou plus) lui sont assignées, une seule est présente à la fois (voir IllegalRotation). */
+    public boolean illegal;
+    /** Minutes entre deux changements d'emplacement (0 = valeur de la config). */
+    public int illegalMinutes;
+    /** Distance (blocs) sous laquelle un joueur bloque le changement d'emplacement (-1 = valeur de la config, 0 = jamais bloqué). */
+    public double illegalRadius = -1;
     public final List<ShopEntry> entries = new ArrayList<>();
     private int nextEntryId = 1;
 
@@ -51,6 +59,12 @@ public class Shop {
         return policeGrade >= 0;
     }
 
+    /** Texte court de l'accès réservé (police / pompiers), "" si ouvert à tous. */
+    public String accessLabel() {
+        if (pompier) return "Pompiers";
+        return policeOnly() ? "Police" : "";
+    }
+
     public boolean requiresLicence() {
         return licence != null && !licence.isBlank();
     }
@@ -70,6 +84,10 @@ public class Shop {
         t.putBoolean("Card", allowCard);
         t.putString("Licence", licence);
         t.putInt("Police", policeGrade);
+        t.putBoolean("Pompier", pompier);
+        t.putBoolean("Illegal", illegal);
+        t.putInt("IllegalMin", illegalMinutes);
+        t.putDouble("IllegalRadius", illegalRadius);
         t.putInt("NextEntry", nextEntryId);
         ListTag list = new ListTag();
         for (ShopEntry e : entries) list.add(e.save());
@@ -88,6 +106,10 @@ public class Shop {
         s.allowCard = t.getBoolean("Card");
         s.licence = t.getString("Licence");   // "" pour les anciennes sauvegardes
         s.policeGrade = t.contains("Police") ? Math.max(-1, Math.min(2, t.getInt("Police"))) : -1;
+        s.pompier = t.getBoolean("Pompier");
+        s.illegal = t.getBoolean("Illegal");
+        s.illegalMinutes = Math.max(0, t.getInt("IllegalMin"));
+        s.illegalRadius = t.contains("IllegalRadius") ? t.getDouble("IllegalRadius") : -1;
         s.nextEntryId = Math.max(1, t.getInt("NextEntry"));
         ListTag list = t.getList("Entries", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
@@ -107,6 +129,10 @@ public class Shop {
         o.addProperty("allowCard", allowCard);
         o.addProperty("licence", licence);
         o.addProperty("policeGrade", policeGrade);
+        o.addProperty("pompier", pompier);
+        o.addProperty("illegal", illegal);
+        o.addProperty("illegalMinutes", illegalMinutes);
+        o.addProperty("illegalRadius", illegalRadius);
         JsonArray arr = new JsonArray();
         for (ShopEntry e : entries) arr.add(e.toJson());
         o.add("entries", arr);
@@ -124,6 +150,10 @@ public class Shop {
         if (o.has("allowCard")) s.allowCard = o.get("allowCard").getAsBoolean();
         if (o.has("licence")) s.licence = o.get("licence").getAsString();
         if (o.has("policeGrade")) s.policeGrade = Math.max(-1, Math.min(2, o.get("policeGrade").getAsInt()));
+        if (o.has("pompier")) s.pompier = o.get("pompier").getAsBoolean();
+        if (o.has("illegal")) s.illegal = o.get("illegal").getAsBoolean();
+        if (o.has("illegalMinutes")) s.illegalMinutes = Math.max(0, o.get("illegalMinutes").getAsInt());
+        if (o.has("illegalRadius")) s.illegalRadius = o.get("illegalRadius").getAsDouble();
         if (o.has("entries")) {
             for (JsonElement el : o.getAsJsonArray("entries")) {
                 ShopEntry e = ShopEntry.fromJson(el.getAsJsonObject());
@@ -151,6 +181,10 @@ public class Shop {
         b.writeBoolean(allowCard);
         b.writeUtf(licence, 64);
         b.writeByte(policeGrade);
+        b.writeBoolean(pompier);
+        b.writeBoolean(illegal);
+        b.writeVarInt(illegalMinutes);
+        b.writeDouble(illegalRadius);
         b.writeVarInt(entries.size());
         for (ShopEntry e : entries) e.write(b);
     }
@@ -162,6 +196,10 @@ public class Shop {
         s.allowCard = b.readBoolean();
         s.licence = b.readUtf(64);
         s.policeGrade = b.readByte();
+        s.pompier = b.readBoolean();
+        s.illegal = b.readBoolean();
+        s.illegalMinutes = b.readVarInt();
+        s.illegalRadius = b.readDouble();
         int n = b.readVarInt();
         for (int i = 0; i < n; i++) s.entries.add(ShopEntry.read(b));
         return s;
